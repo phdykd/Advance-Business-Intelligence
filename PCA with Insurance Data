@@ -1,0 +1,208 @@
+# title: "DSBA AABI PCA with Insurance Data"
+# author: "Yusuf Kemal Demir; Ph.D."
+# date: "03/15/2021"
+
+
+
+#1.	Set Working Directory, download and save the data file Insurance
+# in R Studio Working Directory
+
+setwd("C:/Users/admin/Desktop/UNCC/Spring 2021/6211/Midterm")
+
+#2.	Install packages
+
+# # creating predictive models
+# install.packages("caret")
+# 
+# # imputation
+# install.packages("e1071")
+# install.packages("Hmisc")
+# 
+# # checking multi-colinearity with GVIF
+#  install.packages("car")
+# 
+# # evaluate model performance with ROC curve
+# install.packages("pROC")
+# 
+# # data manipulation for lift
+#  install.packages("dplyr")
+# 
+# install.packages("tidyverse")
+
+
+#3. Load libraries
+
+library(caret)
+library(e1071)
+library(car)
+library(pROC)
+library(dplyr)
+library(tidyverse)
+library(Hmisc)
+
+#4.	Import csv file and running multi-colinearity
+
+dfYKD<-read.csv("Insurance.csv", na.strings = c("NA",""))
+colnames(dfYKD)
+summary(dfYKD)
+str(dfYKD)
+
+table(dfYKD$AGE)
+
+#Remove the ages that can not legally drive, Age <16
+
+dfYKD<- subset(dfYKD, AGE>=16)
+table(dfYKD$AGE)
+
+
+#Correcting data types and measurement level; 
+# factorize the variables
+dfYKD$MARRIED<-factor(dfYKD$MARRIED)
+dfYKD$GENDER<-factor(dfYKD$GENDER)
+dfYKD$CLAIM_IND<-factor(dfYKD$CLAIM_IND)
+
+
+colnames(dfYKD)
+par(mar=c(1,1,1,1))
+hist.data.frame(dfYKD)
+
+
+
+
+# Log transformation for highly skewed variable INCOME, HOUSE, VEHICLE
+
+dfYKD$INCOME<-log10(dfYKD$INCOME+1)
+dfYKD$HOUSE<-log10(dfYKD$HOUSE+1)
+dfYKD$VEHICLE<-log10(dfYKD$VEHICLE+1)
+hist.data.frame(dfYKD)
+
+# Multi-collinearity check
+
+vif(glm(formula=CLAIM_IND~.,family=binomial(link="logit"),data=dfYKD))
+
+# Since, gvif is more than 10 for INCOME, HOUSE AND VEHICLE, there is not multi-collinearity issue in dfYKD
+
+
+
+
+# PCA
+
+# install.packages("caret")
+# install.packages('pROC')
+# install.packages("factoextra")
+# install.packages("corrplot")
+library(caret)
+library(pROC)
+library(factoextra)
+library(corrplot)
+
+
+
+# Model 6: PCA with all numeric variables_WRONG WAY TO DO PCA
+# SELECT NUMCERICAL COLUMNS TO RUN THE PCA
+# PCA is unsupervised, when you run PCA DV should not be part of it.
+# PCA best runs with numerical variables. Therefore, you should reject the categorical when you run PCA model.
+# Select the numerical variables only with dfYKD_num
+# CASE id HAS NO VALUE
+
+dfYKD_num <- dfYKD[,c(2:6, 9,11)]
+colnames(dfYKD_num)
+
+# 7 number of numerical independent variables 7 number of PCA
+
+# Z TRANSFORMATION = variable-mean/stdev
+
+# provide dfYKD_num that has numerical variables
+
+pca <- prcomp(dfYKD_num,center=TRUE,scale. = TRUE)
+
+
+# COEFFICIENTS=eigenvectors
+print(pca)
+# example PC1=coefficient*variable+....
+
+plot(pca,type='l')
+summary(pca)
+# here the standard dev is eigenvalue
+# the first PC captures 42.7 % of the variance that is more than 40% and is not good.
+
+# Plot PCA
+library(factoextra)
+fviz_eig(pca)
+fviz_pca_var(pca,
+             col.var = "contrib", # Color by contributions to the PC
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE     # Avoid text overlapping
+)
+
+# bar shows the contribution of each of the independent variable. 3 variables have same direction, and the variables are all over the place.
+# The reason of them having different directions could be they do not capture similar features.
+# Variables that have same directions capture similar features.
+
+# check the eigenvalue>1 and the cumulative proportion they represent for reducing dimensionality
+
+
+# Predict PCA
+pred_pca <- predict(pca, newdata=dfYKD_num)
+
+
+
+# Create dataset for PC values and categorical variables
+# combine categorical variables of original dataframe (dfYKD) with the first 3 columns of pred_pca (since you wanted to keep PC's that have eigenvalue>1) 
+# this time you have DV, all categorical variables, and 3 PCs
+# The reason of having 3 PCs is already captured the other PCs with 3 PCs.
+dfYKD_PCA <- cbind.data.frame(dfYKD[,c(7,8,10,12,13)],pred_pca[,c(1:3)])
+
+
+# change the name of col6 to FINANCE
+
+names(dfYKD_PCA)[6]='FINANCE'
+
+colnames(dfYKD_PCA)
+
+# Removing PC2 and PC3 from dfYKD_PCA
+dfYKD_PCA <- dfYKD_PCA[,c(1:6)]
+
+colnames(dfYKD_PCA)
+
+
+# Data partition with the Caret package
+trainIndex <- createDataPartition(dfYKD_PCA$CLAIM_IND,
+                                  p=0.7,
+                                  list=FALSE,
+                                  times=1)
+
+#Create logistic regression for dfYKD_PCA
+
+
+dfYKD.train <- dfYKD_PCA[trainIndex,]
+dfYKD.valid <- dfYKD_PCA[-trainIndex,]
+
+# Logistic regression with PC1-selected
+regressionYKD <- train(CLAIM_IND~.,
+                data=dfYKD.train,
+                method="glm",
+                family="binomial")
+summary(regressionYKD)
+
+
+
+# When you apply selective columns with PCA, you have several benefits
+# 1- First PC1 captures majority of proportion of variance 42.7%
+# 2-When you apply conceptually, it might makes sense, you can turn the PC1 to economic/financial features. 
+# 3- We reduced dimensionality without loosing too much information
+
+# Evaluate Model  performance with Confusion Matrix
+prediction <- predict(regressionYKD,dfYKD.valid)
+confusionMatrix(prediction,dfYKD.valid$CLAIM_IND)
+
+
+# Evaluate Model  performance with ROC curve and area under the curve
+
+pred.probabilities <- predict(regressionYKD,newdata=dfYKD.valid,type='prob')
+
+regression.ROC <- roc(predictor=pred.probabilities$`1`,
+                      response=dfYKD.valid$CLAIM_IND,
+                      levels=levels(dfYKD.valid$CLAIM_IND))
+plot(regression.ROC)
+regression.ROC$auc
