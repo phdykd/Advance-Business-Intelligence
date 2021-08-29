@@ -1,0 +1,1750 @@
+setwd("C:/Users/admin/Desktop/UNCC/Spring 2021/Assignments/6211/Demir/R")
+
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(scales)
+library(dplyr)
+library(cat)
+library(caret)
+library(plotly)
+
+# install.packages('treemap')
+library(treemap)
+library (d3treeR) 
+
+#df17<-read.csv("survey2017_clean.csv",na.strings=c("NA",""))
+df18<-read.csv("survey_2018_clean.csv",skip=1,header=TRUE,na.strings=c("NA",""))
+df19<-read.csv("survey_2019_clean.csv",skip=1,header=TRUE,na.strings=c("NA",""))
+df20<-read.csv("survey_2020_clean.csv",skip=1,header=TRUE,na.strings=c("NA",""))
+
+#Removing the extra characters in all the files
+
+df18$Education <- gsub("Ã¢â‚¬â„¢","",df18$Education)
+df19$Education <- gsub("Ã¢â‚¬â„¢","",df19$Education)
+df20$Education <- gsub("Ã¢â‚¬â„¢","",df20$Education)
+
+
+#colnames(df18)[1]="Age"
+#colnames(df17)[1]="Year"
+
+
+                      ## 2019 ##
+
+# Finding missing percentages in 2019
+missing_19=NULL
+for(i in 1:ncol(df19))
+{
+  col_name<-colnames(df19[i])
+  count<-sum(is.na(df19[i]))
+  len<-nrow(df19)
+  per<- round(count/len*100)
+  missing_19 <- rbind(missing_19, data.frame(col_name,per))
+}
+
+#Finding No of unique values in 2019
+all_uniques19=NULL
+for (i in 1:ncol(df19))
+{
+  distinct<-n_distinct(df19[i])
+  col_name<-colnames(df19[i])
+  print(distinct)
+  print(col_name)
+  all_uniques19<-rbind(all_uniques19,data.frame(col_name,distinct))
+}
+
+
+                       ## 2020 ##
+
+# Finding missing percentages in 2020
+
+
+missing_20=NULL
+for(i in 1:ncol(df20))
+{
+  col_name<-colnames(df20[i])
+  count<-sum(is.na(df20[i]))
+  len<-nrow(df20)
+  per<- round(count/len*100)
+  missing_20 <- rbind(missing_20, data.frame(col_name,per))
+}
+
+#Finding No of unique values in 2020
+all_uniques20=NULL
+for (i in 1:ncol(df20))
+{
+  distinct<-n_distinct(df20[i])
+  col_name<-colnames(df20[i])
+  print(distinct)
+  print(col_name)
+  all_uniques20<-rbind(all_uniques20,data.frame(col_name,distinct))
+}
+
+                      ## 2018  ##
+
+#Finding missing percentages in 2018
+
+missing_18=NULL
+for(i in 1:ncol(df18))
+{
+  col_name<-colnames(df18[i])
+  count<-sum(is.na(df18[i]))
+  len<-nrow(df18)
+  per<- round(count/len*100)
+  missing_18 <- rbind(missing_18, data.frame(col_name,per))
+}
+
+#Imaging missing percentages in 2018
+missing.values <- df18 %>%
+  gather(key = "key", value = "val") %>%
+  mutate(isna = is.na(val)) %>%
+  group_by(key) %>%
+  mutate(total = n()) %>%
+  group_by(key, total, isna) %>%
+  summarise(num.isna = n()) %>%
+  mutate(pct = num.isna / total * 100)
+levels <- (missing.values  %>% filter(isna == T) %>%     
+             arrange(desc(pct)))$key
+percentage.plot <- missing.values %>%
+  ggplot() +
+  geom_bar(aes(x = reorder(key, desc(pct)), 
+               y = pct, fill=isna), 
+           stat = 'identity', alpha=0.8) +
+  scale_x_discrete(limits = levels) +
+  scale_fill_manual(name = "", 
+                    values = c('steelblue', 'tomato3'), 
+                    labels = c("Present", "Missing")) +
+  coord_flip() +
+  labs(title = "Percentage of missing values of raw data df18", 
+       x = 'Variable', y = "% of missing values")
+percentage.plot
+
+
+
+#Finding No of unique values in 2018
+
+all_uniques18=NULL
+for (i in 1:ncol(df18))
+{
+  distinct<-n_distinct(df18[i])
+  col_name<-colnames(df18[i])
+  print(distinct)
+  print(col_name)
+  all_uniques18<-rbind(all_uniques18,data.frame(col_name,distinct))
+}
+
+
+                   ## 2017 ##
+
+
+
+# Joining all the missing values tables
+diff1<-full_join(missing_20, missing_19, by="col_name")
+colnames(diff1)[2]="2020"
+colnames(diff1)[3]="2019"
+
+
+
+missing_before<-full_join(diff1,missing_18, by="col_name")
+colnames(missing_before)[4]="2018"
+missing_before<-missing_before[order(missing_before$col_name),]
+
+write.csv(diff1,"C:/Users/admin/Desktop/UNCC/Spring 2021/Assignments/6211/Demir/R/Missing_chart_beforeJoin.csv", row.names=FALSE)
+
+# Joining the datasets
+d1<-full_join(df20,full_join(df19,df18,by.x="ID",by.y="ID"),by.x="ID",by.y="ID")
+
+write.csv(d1,"C:/Users/admin/Desktop/UNCC/Spring 2021/Assignments/6211/Demir/R/d1_v1.csv", row.names=FALSE)
+
+
+#Finding all missing percentages in joined dataset
+missing_after=NULL
+for(i in 1:ncol(d1))
+{
+  col_name<-colnames(d1[i])
+  count<-sum(is.na(d1[i]))
+  len<-nrow(d1)
+  per<- round(count/len*100)
+  missing_after <- rbind(missing_after, data.frame(col_name,per))
+}
+
+
+
+
+#ordering
+missing_after_order<-missing_after[order(-missing_after$per),]
+
+#finding list of the columns with above 90 missing percent
+list_above<-which(missing_after$per>90)
+
+# Removing the columns with above 90 percent missing values
+Data <- subset( d1, select = -c(list_above ))
+
+
+write.csv(Data,"C:/Users/admin/Desktop/UNCC/Spring 2021/Assignments/6211/Demir/R/FinalData.csv",row.names=FALSE)
+
+
+
+#testing unique
+test_uniques=NULL
+for (i in 1:ncol(Data))
+{
+  distinct<-n_distinct(Data[i])
+  col_name<-colnames(Data[i])
+  test_uniques<-rbind(test_uniques,data.frame(col_name,distinct))
+}
+
+
+unique_list=NULL
+for(i in 2:ncol(Data))
+{
+  uni_values<-as.data.frame(table(Data[i]))
+  col_name<-colnames(Data[i])
+  unique_list<-rbind(unique_list,data.frame(i,col_name,uni_values))
+}
+
+
+Data_single<- d1[,c(1:8,22,61,78,87,153)]
+
+Data_multiple<- d1[,-c(1:8,22,61,78,87,153)]
+
+
+
+
+for( i in 1:length(Data_multiple))
+{
+  Data_multiple[i]<- ifelse(is.na(Data_multiple[i]),0, 1)
+}
+
+
+Data_multiple$row_sums<-rowSums(Data_multiple)
+
+rows_missing<-which(Data_multiple$row_sums==0)
+
+
+Data1<-cbind(Data_single,Data_multiple)
+
+write.csv(Data1,"C:/Users/admin/Desktop/UNCC/Spring 2021/Assignments/6211/Demir/R/Data1.csv",row.names=FALSE)
+
+
+# Regrouping the dataset Data1
+
+
+
+
+Data1$Age <- gsub("70-79","70+",Data1$Age)
+Data1$Age <-gsub("80","70",Data1$Age)
+table(Data1$Age)
+
+Data1$Gender <-gsub("Man","Male",Data1$Gender)
+Data1$Gender<-gsub("Nonbinary","Other",Data1$Gender)
+Data1$Gender<-gsub("Prefer not to say","Other",Data1$Gender)
+Data1$Gender<-gsub("Prefer to self-describe","Other",Data1$Gender)
+Data1$Gender<-gsub("Woman","Female",Data1$Gender)
+
+
+Data1$Country<-gsub("I do not wish to disclose my location","Other",Data1$Country)
+
+Data1$Education<-gsub("Some college/university study without earning a bachelors degree","No formal education past high school",Data1$Education)
+
+Data1$Job_Title<-gsub("Currently not employed","Not employed",Data1$Job_Title)
+
+
+
+Data1$Yrs_Code_Writing<-gsub("< 1 years","< 1 year",Data1$Yrs_Code_Writing)
+Data1$Yrs_Code_Writing<-gsub("I have never written code","0 year",Data1$Yrs_Code_Writing)
+Data1$Yrs_Code_Writing<-gsub("0 year and I do not want to learn","0 year",Data1$Yrs_Code_Writing)
+Data1$Yrs_Code_Writing<-gsub("0 year but I want to learn","0 year",Data1$Yrs_Code_Writing)
+Data1$Yrs_Code_Writing<-gsub("20-30","20+",Data1$Yrs_Code_Writing)
+Data1$Yrs_Code_Writing<-gsub("30-40 years","20+ years",Data1$Yrs_Code_Writing)
+Data1$Yrs_Code_Writing<-gsub("40","20",Data1$Yrs_Code_Writing)
+
+Yrs_Code_Writing_plot <-ggplot(Data1)+ geom_bar(aes(x=Yrs_Code_Writing,fill=factor(Year)),position = position_dodge(preserve = 'single'))+coord_flip()
+Yrs_Code_Writing_plot
+
+Data1$Prog_Lang_Recommend<-gsub("None","Other",Data1$Prog_Lang_Recommend)
+
+
+
+Data1$Yrs_ML_used<-gsub("0 years","0 year",Data1$Yrs_ML_used)
+Data1$Yrs_ML_used<-gsub("< 1 years","< 1 year",Data1$Yrs_ML_used)
+Data1$Yrs_ML_used<-gsub("20 or more years","20+ years",Data1$Yrs_ML_used)
+Data1$Yrs_ML_used<-gsub("Under 1 year","< 1 year",Data1$Yrs_ML_used)
+Data1$Yrs_ML_used<-gsub("I do not use machine learning methods","0 year",Data1$Yrs_ML_used)
+Data1$Yrs_ML_used<-gsub("I have never studied machine learning and I do not plan to","0 years",Data1$Yrs_ML_used)
+Data1$Yrs_ML_used<-gsub("I have never studied machine learning but plan to learn in the future","0 year",Data1$Yrs_ML_used)
+
+Data1$ML_used<-gsub("I do not know","No",Data1$ML_used)
+Data1[Data1=="No (we do not use ML methods)"]<-"No"
+Data1[Data1=="We are exploring ML methods (and may one day put a model into production)"]<-"No"
+Data1[Data1=="We recently started using ML methods (i.e., models in production for less than 2 years)"]<-"Yes"
+Data1[Data1=="We have well established ML methods (i.e., models in production for more than 2 years)"]<-"Yes"
+Data1[Data1=="We use ML methods for generating insights (but do not put working models into production)"]<-"No"
+
+
+
+
+Data1[Data1=="$0-999"]<-"1,000"
+Data1[Data1=="> $500,000"]<-"500,000"
+Data1[Data1=="1,000-1,999"]<-"2,000"
+Data1[Data1=="10,000-14,999"]<-"15,000"
+Data1[Data1=="100,000-124,999"]<-"125,000"
+Data1[Data1=="125,000-149,999"]<-"150,000"
+Data1[Data1=="15,000-19,999"]<-"20,000"
+Data1[Data1=="150,000-199,999"]<-"200,000"
+Data1[Data1=="2,000-2,999"]<-"3,000"
+Data1[Data1=="20,000-24,999"]<-"25,000"
+Data1[Data1=="200,000-249,999"]<-"250,000"
+Data1[Data1=="25,000-29,999"]<-"30,000"
+Data1[Data1=="250,000-299,999"]<-"300,000"
+Data1[Data1=="3,000-3,999"]<-"4,000"
+Data1[Data1=="30,000-39,999"]<-"40,000"
+Data1[Data1=="300,000-500,000"]<-"500,000"
+Data1[Data1=="4,000-4,999"]<-"5,000"
+Data1[Data1=="40,000-49,999"]<-"50,000"
+Data1[Data1=="5,000-7,499"]<-"7,500"
+Data1[Data1=="50,000-59,999"]<-"60,000"
+Data1[Data1=="60,000-69,999"]<-"70,000"
+Data1[Data1=="7,500-9,999"]<-"10,000"
+Data1[Data1=="70,000-79,999"]<-"80,000"
+Data1[Data1=="80,000-89,999"]<-"90,000"
+Data1[Data1=="90,000-99,999"]<-"100,000"
+Data1[Data1=="I do not wish to disclose my approximate yearly compensation"]<-"None"
+
+Data1[Data1=="250-300,000"]<-"300,000"
+Data1[Data1=="300-400,000"]<-"400,000"
+Data1[Data1=="300-500,000"]<-"500,000"
+Data1[Data1=="400-500,000"]<-"500,000"
+Data1[Data1=="500,000+"]<-"500,000"
+
+Data1[Data1=="0-1,000"]<-"10,000"
+Data1[Data1=="1,000-2,000"]<-"2,000"
+Data1[Data1=="2,000-3,000"]<-"3,000"
+Data1[Data1=="3,000-4,000"]<-"4,000"
+Data1[Data1=="4,000-5,000"]<-"5,000"
+Data1[Data1=="5,000-7,500"]<-"7,500"
+Data1[Data1=="7,500-10,000"]<-"10,000"
+
+Data1[Data1=="15-20,000"]<-"20,000"
+Data1[Data1=="10-15,000"]<-"15,000"
+Data1[Data1=="20-25,000"]<-"25,000"
+Data1[Data1=="25-30,000"]<-"30,000"
+
+Data1[Data1=="0-10,000"]<-"10,000"
+Data1[Data1=="10-20,000"]<-"20,000"
+Data1[Data1=="100-125,000"]<-"125,000"
+Data1[Data1=="125-150,000"]<-"150,000"
+Data1[Data1=="150-200,000"]<-"200,000"
+Data1[Data1=="20-30,000"]<-"30,000"
+Data1[Data1=="200-250,000"]<-"250,000"
+Data1[Data1=="30-40,000"]<-"40,000"
+Data1[Data1=="40-50,000"]<-"50,000"
+Data1[Data1=="50-60,000"]<-"60,000"
+Data1[Data1=="60-70,000"]<-"70,000"
+Data1[Data1=="70-80,000"]<-"80,000"
+Data1[Data1=="80-90,000"]<-"90,000"
+Data1[Data1=="90-100,000"]<-"100,000"
+Data1[Data1=="None"]<-"0"
+
+
+check_list=NULL
+for(i in 2:ncol(Data1))
+{
+  uni_values<-as.data.frame(table(Data1[i]))
+  col_name<-colnames(Data1[i])
+  check_list<-rbind(check_list,data.frame(i,col_name,uni_values))
+}
+
+Data2<-Data1
+
+write.csv(Data2,"C:/Users/admin/Desktop/UNCC/Spring 2021/Assignments/6211/Demir/R/Data2.csv",row.names=FALSE)
+
+
+
+colnames(Data2)
+
+Data_multiple1<- Data2[,-c(1:13,266)]
+
+Data_multiple1_transpose <- as.data.frame(t(as.matrix(Data_multiple1)))
+
+Data_multiple1_transpose$Total<-rowSums(Data_multiple1_transpose)
+
+
+Data_multiple1_transpose <- subset(Data_multiple1_transpose, select = -c(1:63612))
+
+Data_multiple2_transpose <- Data_multiple1_transpose
+
+Data_multiple1_transpose <- as.data.frame(t(as.matrix(Data_multiple1_transpose)))
+
+rownames(Data_multiple1_transpose) <- NULL
+
+# Total Salary by Year Pie chart
+Salary_plot<- Data2
+Salary_plot <- Salary_plot %>% group_by(Salary)
+Salary_plot %>% summarize(count = n())
+Salary_plot1 <-Salary_plot %>% plot_ly(labels = ~Year, values = ~count)
+Salary_plot1 <-Salary_plot1 %>% add_pie(hole = 0.6)
+Salary_plot1 <-Salary_plot1 %>% layout(showlegend = T,
+                       xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+                       yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+                       annotations=list(text='Salary by Year', "showarrow"=F))
+Salary_plot1
+
+
+# Splitting Data by Year
+
+df18_1<-subset(Data2,Year %in% c("2018"))
+df18_1
+
+df19_1<-subset(Data2,Year %in% c("2019"))
+df19_1
+
+df20_1<-subset(Data2,Year %in% c("2020"))
+df20_1
+
+
+table(df18_1$Age)
+
+#Age Pie chart
+
+Age_year_pie <- plot_ly()
+Age_year_pie <- Age_year_pie %>% add_pie(data = count(df18_1, Age), labels = ~Age, values = ~n,
+                         name = "Age", domain = list(row = 0, column = 0),textposition="inside", title='2018',sort=FALSE)
+
+Age_year_pie <- Age_year_pie %>% add_pie(data = count(df19_1, Age), labels = ~Age, values = ~n,
+                         name = "Age", domain = list(row = 0, column = 1),textposition="inside", title='2019', sort=FALSE)
+
+Age_year_pie <- Age_year_pie %>% add_pie(data = count(df20_1, Age), labels = ~Age, values = ~n,
+                         name = "Age", domain = list(row = 0, column = 2),textposition="inside",title='2020', sort=FALSE)
+
+Age_year_pie <- Age_year_pie %>% layout(title = "Age", legend = list(x = 1, y = 0.5), showlegend = T,
+                        grid=list(rows=1, columns=3),
+                        xaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F),
+                        yaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F))
+
+Age_year_pie 
+
+
+
+
+#Gender Pie chart
+
+Gender_pie <- plot_ly()
+Gender_pie  <- Gender_pie  %>% add_pie(data = count(df18_1, Gender), labels = ~Gender, values = ~n,
+                                         name = "Gender", domain = list(row = 0, column = 0),textposition="inside", title='2018',sort=FALSE)
+
+Gender_pie  <- Gender_pie %>% add_pie(data = count(df19_1, Gender), labels = ~Gender, values = ~n,
+                                         name = "Gender", domain = list(row = 0, column = 1),textposition="inside", title='2019', sort=FALSE)
+
+Gender_pie  <- Gender_pie %>% add_pie(data = count(df20_1, Gender), labels = ~Gender, values = ~n,
+                                         name = "Gender", domain = list(row = 0, column = 2),textposition="inside",title='2020', sort=FALSE)
+
+Gender_pie  <- Gender_pie %>% layout(title = "Gender", legend = list(x = 1, y = 0.5), showlegend = T,
+                                        grid=list(rows=1, columns=3),
+                                        xaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F),
+                                        yaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F))
+
+Gender_pie 
+
+
+
+
+#Education Pie chart
+
+Education_pie <- plot_ly()
+Education_pie <- Education_pie  %>% add_pie(data = count(df18_1, Education), labels = ~Education, values = ~n,
+                                       name = "Education", domain = list(row = 0, column = 0),textposition="inside", title='2018',sort=FALSE)
+
+Education_pie  <- Education_pie %>% add_pie(data = count(df19_1, Education), labels = ~Education, values = ~n,
+                                      name = "Education", domain = list(row = 1, column = 0),textposition="inside", title='2019', sort=FALSE)
+
+Education_pie  <- Education_pie %>% add_pie(data = count(df20_1, Education), labels = ~Education, values = ~n,
+                                      name = "Education", domain = list(row = 2, column = 0),textposition="inside",title='2020', sort=FALSE)
+
+Education_pie  <- Education_pie %>% layout(title = "Education", legend = list(x = 1, y = 0.5), showlegend = T,
+                                     grid=list(rows=3, columns=1),
+                                     xaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F),
+                                     yaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F))
+
+Education_pie 
+
+
+
+#Job Title Pie chart
+
+Job_Title_pie <- plot_ly()
+Job_Title_pie  <- Job_Title_pie %>% add_pie(data = count(df18_1, Job_Title), labels = ~Job_Title, values = ~n,
+                                            name = "Job_Title", domain = list(row = 0, column = 0),textposition="inside", title='2018',sort=FALSE)
+
+Job_Title_pie  <- Job_Title_pie %>% add_pie(data = count(df19_1, Job_Title), labels = ~Job_Title, values = ~n,
+                                            name = "Job_Title", domain = list(row = 1, column = 0),textposition="inside", title='2019', sort=FALSE)
+
+Job_Title_pie  <- Job_Title_pie %>% add_pie(data = count(df20_1, Job_Title), labels = ~Job_Title, values = ~n,
+                                            name = "Job_Title", domain = list(row = 2, column = 0),textposition="inside",title='2020', sort=FALSE)
+
+Job_Title_pie  <- Job_Title_pie %>% layout(title = "Job_Title", legend = list(x = 1, y = 0.5), showlegend = T,
+                                           grid=list(rows=3, columns=1),
+                                           xaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F),
+                                           yaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F))
+
+Job_Title_pie
+
+
+
+
+#Yrs_Code_Writing Pie chart
+
+Yrs_Code_Writing_pie <- plot_ly()
+Yrs_Code_Writing_pie <- Yrs_Code_Writing_pie  %>% add_pie(data = count(df18_1, Yrs_Code_Writing), labels = ~Yrs_Code_Writing, values = ~n,
+                                            name = "Yrs_Code_Writing", domain = list(row = 0, column = 0),textposition="inside", title='2018',sort=FALSE)
+
+Yrs_Code_Writing_pie <- Yrs_Code_Writing_pie  %>% add_pie(data = count(df19_1, Yrs_Code_Writing), labels = ~Yrs_Code_Writing, values = ~n,
+                                            name = "Yrs_Code_Writing", domain = list(row = 1, column = 0),textposition="inside", title='2019', sort=FALSE)
+
+Yrs_Code_Writing_pie <- Yrs_Code_Writing_pie %>% add_pie(data = count(df20_1, Yrs_Code_Writing), labels = ~Yrs_Code_Writing, values = ~n,
+                                            name = "Yrs_Code_Writing", domain = list(row = 2, column = 0),textposition="inside",title='2020', sort=FALSE)
+
+Yrs_Code_Writing_pie <- Yrs_Code_Writing_pie %>% layout(title = "Yrs_Code_Writing", legend = list(x = 1, y = 0.5), showlegend = T,
+                                           grid=list(rows=3, columns=1),
+                                           xaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F),
+                                           yaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F))
+
+Yrs_Code_Writing_pie
+
+
+
+
+#Yrs_ML_used Pie chart
+
+table(df18_1$Yrs_ML_used)
+
+table(df19_1$Yrs_ML_used)
+
+table(df20_1$Yrs_ML_used)
+
+
+
+Yrs_ML_used_pie <- plot_ly()
+Yrs_ML_used_pie <- Yrs_ML_used_pie  %>% add_pie(data = count(df18_1, Yrs_ML_used), labels = ~Yrs_ML_used, values = ~n,
+                                                          name = "Yrs_ML_used", domain = list(row = 0, column = 0),textposition="inside", title='2018',sort=FALSE)
+
+Yrs_ML_used_pie <- Yrs_ML_used_pie %>% add_pie(data = count(df19_1, Yrs_ML_used), labels = ~Yrs_ML_used, values = ~n,
+                                                          name = "Yrs_ML_used", domain = list(row = 1, column = 0),textposition="inside", title='2019', sort=FALSE)
+
+Yrs_ML_used_pie <- Yrs_ML_used_pie %>% add_pie(data = count(df20_1, Yrs_ML_used), labels = ~Yrs_ML_used, values = ~n,
+                                                         name = "Yrs_ML_used", domain = list(row = 2, column = 0),textposition="inside",title='2020', sort=FALSE)
+
+Yrs_ML_used_pie <- Yrs_ML_used_pie %>% layout(title = "Yrs_ML_used", legend = list(x = 1, y = 0.5), showlegend = T,
+                                                        grid=list(rows=3, columns=1),
+                                                        xaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F),
+                                                        yaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F))
+
+Yrs_ML_used_pie
+
+
+
+#Prog_Lang_Recommend Pie chart
+
+Prog_Lang_Recommend_pie <- plot_ly()
+Prog_Lang_Recommend_pie <- Prog_Lang_Recommend_pie  %>% add_pie(data = count(df18_1, Prog_Lang_Recommend), labels = ~Prog_Lang_Recommend, values = ~n,
+                                                name = "Prog_Lang_Recommend", domain = list(row = 0, column = 0),textposition="inside", title='2018',sort=FALSE)
+
+Prog_Lang_Recommend_pie <- Prog_Lang_Recommend_pie  %>% add_pie(data = count(df19_1, Prog_Lang_Recommend), labels = ~Prog_Lang_Recommend, values = ~n,
+                                               name = "Prog_Lang_Recommend", domain = list(row = 1, column = 0),textposition="inside", title='2019', sort=FALSE)
+
+Prog_Lang_Recommend_pie <- Prog_Lang_Recommend_pie %>% add_pie(data = count(df20_1, Prog_Lang_Recommend), labels = ~Prog_Lang_Recommend, values = ~n,
+                                               name = "Prog_Lang_Recommend", domain = list(row = 2, column = 0),textposition="inside",title='2020', sort=FALSE)
+
+Prog_Lang_Recommend_pie <- Prog_Lang_Recommend_pie  %>% layout(title = "Prog_Lang_Recommend", legend = list(x = 1, y = 0.5), showlegend = T,
+                                              grid=list(rows=3, columns=1),
+                                              xaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F),
+                                              yaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F))
+
+
+
+
+
+
+#Read Data that has "Salary" as numeric. Salary is changed to numeric in excel and while imported to R
+
+
+
+Data3<-read.csv("Data3.csv",header=TRUE,na.strings=c("NA",""))
+Data3$Yrs_ML_used<-gsub("0 years","0 year",Data3$Yrs_ML_used)
+Data3$Yrs_ML_used<-gsub("5-10 year","5-10 years",Data3$Yrs_ML_used)
+
+
+df18_2<-read.csv("df18_2.csv",header=TRUE,na.strings=c("NA",""))
+
+df19_2<-read.csv("df19_2.csv",header=TRUE,na.strings=c("NA",""))
+
+
+df20_2<-read.csv("df20_2.csv",header=TRUE,na.strings=c("NA",""))
+
+
+
+#Salary Pie chart
+
+Salary_pie <- plot_ly()
+Salary_pie <- Salary_pie %>% add_pie(data = count(df18_2, Salary), labels = ~Salary, values = ~n,
+                                                                name = "Salary", domain = list(row = 0, column = 0),textposition="inside", title='2018',sort=FALSE)
+
+Salary_pie <- Salary_pie  %>% add_pie(data = count(df19_1, Salary), labels = ~Salary, values = ~n,
+                                                                name = "Salary", domain = list(row = 1, column = 0),textposition="inside", title='2019', sort=FALSE)
+
+Salary_pie <- Salary_pie %>% add_pie(data = count(df20_1, Salary), labels = ~Salary, values = ~n,
+                                                               name = "Salary", domain = list(row = 2, column = 0),textposition="inside",title='2020', sort=FALSE)
+
+Salary_pie <- Salary_pie  %>% layout(title = "Salary", legend = list(x = 1, y = 0.5), showlegend = T,
+                                                               grid=list(rows=3, columns=1),
+                                                               xaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F),
+                                                               yaxis = list(showgrid = F, zeroline = FALSE, showticklabels = F))
+
+Salary_pie
+
+
+
+
+#Prog_Lang_Use Pie chart
+
+
+
+treemap_df18_2 <- treemap(df18_2, index="Country",vSize='Salary',vColor="Country",border.col=c("black","white"), palette = "RdYlBu", title="Salary 2018",
+fontsize.title=12, fontsize.labels = 12)
+
+
+t18_2<-d3tree2(treemap_df18_2,rootname = "Salary 2018")
+t18_2
+
+
+treemap_df19_2 <- treemap(df19_2, index="Country",vSize='Salary',vColor="Country",border.col=c("black","white"), palette = "RdYlBu", title="Salary 2019",
+                          fontsize.title=12, fontsize.labels = 12)
+
+
+t19_2<-d3tree2(treemap_df19_2,rootname = "Salary 2019")
+t19_2
+
+
+
+treemap_df20_2 <- treemap(df20_2, index="Country",vSize='Salary',vColor="Country",border.col=c("black","white"), palette = "RdYlBu", title="Salary 2020",
+                          fontsize.title=12, fontsize.labels = 12)
+
+
+t20_2<-d3tree2(treemap_df20_2,rootname = "Salary 2020")
+t20_2
+
+
+
+#Salary by gender at 18-19-20
+salary_all_stacked_bar <- ggplot(Data3, aes(x = Country, y = Salary,fill = Gender)) + ggtitle("Salary by gender at 18-19-20")
+salary_all_stacked_bar <- salary_all_stacked_bar + geom_bar(stat = "identity", position = "stack")
+salary_all_stacked_bar <- ggplotly(salary_all_stacked_bar)
+salary_all_stacked_bar
+
+
+#Mean Salary by Country, Gender, and Year
+Data3$Year<-factor(Data3$Year)
+df18_2$Year<-factor(df18_2$Year)
+df19_2$Year<-factor(df19_2$Year)
+df20_2$Year<-factor(df20_2$Year)
+
+
+# install.packages("dplyr")
+library(dplyr)
+
+library(plyr) 
+require(plyr)
+
+
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x)}
+
+A<-Data3 %>% group_by(Country, Gender, Year)%>% summarize(Mean = round(mean(Salary,0, na.rm = TRUE)))
+A
+
+A1 <- ggplot(A, aes(x = Country, y =  Mean, fill=Gender)) + ggtitle("Mean Salary by Country, Gender,  and Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) +
+  geom_bar(stat = "identity", position = "stack")+facet_grid(vars(Year)) + scale_y_continuous(labels = ks)
+A1
+
+A1<- ggplotly(A1)
+A1
+
+### Normalized Mean Salary by Country, Gender,  and Year
+B<-Data3 %>% group_by(Country, Gender, Year)%>% summarize(Normalized_Mean = round(mean(Salary,0, na.rm = TRUE)))
+B
+
+B1 <- ggplot(B, aes(x = Country, y =  Normalized_Mean, fill=Year)) + ggtitle("Normalized Mean Salary by Country, Gender,  and Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) +
+  geom_bar(stat = "identity", position = 'fill')+facet_grid(vars(Gender), scales="free_y")
+ 
+B1
+
+B1<- ggplotly(B1)
+B1
+
+
+
+
+#Mean Salary by Gender
+
+Mean_Salary_all<-ddply(Data3, .(Year, Gender), summarize, Mean = round(mean(Salary, na.rm=TRUE),0))
+Mean_Salary_all
+
+
+Mean_Salary_All_Gender <- Data3 %>% group_by(Gender) %>% summarize(Mean = mean(Salary, na.rm=TRUE), Min = min(Salary), Max = max(Salary))
+Mean_Salary_All_Gender<- ggplot(Mean_Salary_All_Gender, aes(x = Gender, y = Mean,ymin = Min, ymax = Max, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar() +
+  ggtitle("Mean Salary at Year 18-19-20")
+Mean_Salary_All_Gender  <- ggplotly(Mean_Salary_All_Gender)
+Mean_Salary_All_Gender
+
+
+
+
+####
+
+# Data_pivot for program language
+
+Data_pivot<- Data3[,c(2,14:26)]
+
+Data_pivot<-Data_pivot%>% pivot_longer(!Year,names_to="language",values_to="count")
+
+Data_pivot<-Data_pivot %>% group_by(language,Year)%>% summarize(total = sum(count))
+
+
+
+# Program Languages Used by Year
+
+C <- ggplot(Data_pivot , aes(x = reorder(language,-total), y =  total, fill=Year)) + ggtitle("Program Languages Used by Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) + scale_y_continuous(labels = ks)+
+  geom_bar(stat = "identity", position = "dodge")+
+  xlab('')
+C
+
+C<- ggplotly(C)
+C
+
+
+
+
+# Data_pivot for IDE
+
+Data_pivot1<- Data3[,c(2,27:38)]
+
+Data_pivot1<-Data_pivot1%>% pivot_longer(!Year,names_to="IDE",values_to="count")
+
+Data_pivot1<-Data_pivot1 %>% group_by(IDE,Year)%>% summarize(total = sum(count))
+
+
+
+# IDE Used by Year
+
+D <- ggplot(Data_pivot1 , aes(x = reorder(IDE,-total), y =  total, fill=Year)) + ggtitle("IDE Used by Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) + scale_y_continuous(labels = ks)+
+  geom_bar(stat = "identity", position = "dodge")+
+  xlab('')
+D
+
+D<- ggplotly(D)
+D
+
+
+# Data_pivot for Hosted Notebook
+
+Data_pivot2<- Data3[,c(2,39:52)]
+
+Data_pivot2<-Data_pivot2%>% pivot_longer(!Year,names_to="Hosted_Notebook",values_to="count")
+
+Data_pivot2<-Data_pivot2 %>% group_by(Hosted_Notebook,Year)%>% summarize(total = sum(count))
+
+
+
+# Hosted_Notebook Used by Year
+
+E <- ggplot(Data_pivot2 , aes(x = reorder(Hosted_Notebook,-total), y =  total, fill=Year)) + ggtitle("Hosted_Notebook Used by Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) + scale_y_continuous(labels = ks)+
+  geom_bar(stat = "identity", position = "dodge")+
+  xlab('')
+E
+
+E<- ggplotly(E)
+E
+
+
+
+
+
+# Data_pivot for Visual_Library
+
+Data_pivot3<- Data3[,c(2,53:64)]
+
+Data_pivot3<-Data_pivot3%>% pivot_longer(!Year,names_to="Visual_Library",values_to="count")
+
+Data_pivot3<-Data_pivot3 %>% group_by(Visual_Library,Year)%>% summarize(total = sum(count))
+
+
+
+# Hosted_Notebook Used by Year
+
+G <- ggplot(Data_pivot3 , aes(x = reorder(Visual_Library,-total), y =  total, fill=Year)) + ggtitle("Visual_Library Used by Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) + scale_y_continuous(labels = ks)+
+  geom_bar(stat = "identity", position = "dodge")+
+  xlab('')
+
+G
+G<- ggplotly(G)
+G
+
+
+
+
+# Data_pivot for ML_Framework
+
+Data_pivot4<- Data3[,c(2,65:80)]
+
+Data_pivot4<-Data_pivot4%>% pivot_longer(!Year,names_to="ML_Framework",values_to="count")
+
+Data_pivot4<-Data_pivot4 %>% group_by(ML_Framework,Year)%>% summarize(total = sum(count))
+
+
+
+# ML_Framework Used by Year
+
+H <- ggplot(Data_pivot4 , aes(x = reorder(ML_Framework,-total), y =  total, fill=Year)) + ggtitle("ML_Framework Used by Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) + scale_y_continuous(labels = ks)+
+  geom_bar(stat = "identity", position = "dodge")+
+  xlab('')
+
+H
+H<- ggplotly(H)
+H
+
+
+
+
+# Data_pivot for Role
+
+Data_pivot5<- Data3[,c(2,81:88)]
+
+Data_pivot5<-Data_pivot5%>% pivot_longer(!Year,names_to="Role",values_to="count")
+
+Data_pivot5<-Data_pivot5 %>% group_by(Role,Year)%>% summarize(total = sum(count))
+
+
+
+# Role Used by Year
+
+J <- ggplot(Data_pivot5 , aes(x = reorder(Role,-total), y =  total, fill=Year)) + ggtitle("Role Used by Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) + scale_y_continuous(labels = ks)+
+  geom_bar(stat = "identity", position = "dodge")+
+  xlab('')
+
+J
+J<- ggplotly(J)
+J
+
+
+# Data_pivot for Cloud Platform
+
+Data_pivot6<- Data3[,c(2,89:100)]
+
+Data_pivot6<-Data_pivot6%>% pivot_longer(!Year,names_to="Cloud_Platform",values_to="count")
+
+Data_pivot6<-Data_pivot6 %>% group_by(Cloud_Platform,Year)%>% summarize(total = sum(count))
+
+
+
+# Cloud Platform Used by Year
+
+K <- ggplot(Data_pivot6 , aes(x = reorder(Cloud_Platform,-total), y =  total, fill=Year)) + ggtitle("Cloud_Platform Used by Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) + scale_y_continuous(labels = ks)+
+  geom_bar(stat = "identity", position = "dodge")+
+  xlab('')
+
+K
+K<- ggplotly(K)
+K
+
+
+
+# Data_pivot for Cloud 
+
+Data_pivot7<- Data3[,c(2,101:112)]
+
+Data_pivot7<-Data_pivot7%>% pivot_longer(!Year,names_to="Cloud",values_to="count")
+
+Data_pivot7<-Data_pivot7 %>% group_by(Cloud,Year)%>% summarize(total = sum(count))
+
+
+
+# Cloud Used by Year
+
+L <- ggplot(Data_pivot7 , aes(x = reorder(Cloud,-total), y =  total, fill=Year)) + ggtitle("Cloud Used by Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) + scale_y_continuous(labels = ks)+
+  geom_bar(stat = "identity", position = "dodge")+
+  xlab('')
+
+L
+L<- ggplotly(L)
+L
+
+
+# Data_pivot for ML_Product 
+
+Data_pivot8<- Data3[,c(2,113:123)]
+
+Data_pivot8<-Data_pivot8 %>% pivot_longer(!Year,names_to="ML_Product",values_to="count")
+
+Data_pivot8<-Data_pivot8 %>% group_by(ML_Product,Year)%>% summarize(total = sum(count))
+
+
+
+# ML_Product Used by Year
+
+M <- ggplot(Data_pivot8 , aes(x = reorder(ML_Product,-total), y =  total, fill=Year)) + ggtitle("ML_Product Used by Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) + scale_y_continuous(labels = ks)+
+  geom_bar(stat = "identity", position = "dodge")+
+  xlab('')
+
+M
+M<- ggplotly(M)
+M
+
+
+
+
+# Data_pivot for RD 
+
+Data_pivot9<- Data3[,c(2,124:139)]
+
+Data_pivot9<-Data_pivot9 %>% pivot_longer(!Year,names_to="RD",values_to="count")
+
+Data_pivot9<-Data_pivot9 %>% group_by(RD,Year)%>% summarize(total = sum(count))
+
+
+
+# RD Used by Year
+
+N <- ggplot(Data_pivot9, aes(x = reorder(RD,-total), y =  total, fill=Year)) + ggtitle("RD Used by Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) + scale_y_continuous(labels = ks)+
+  geom_bar(stat = "identity", position = "dodge")+
+  xlab('')
+
+N
+N<- ggplotly(N)
+N
+
+
+
+
+# Data_pivot for Course platform
+
+Data3[,c(2,142:152)]
+
+Data_pivot11<- Data3[,c(2,142:152)]
+
+Data_pivot11<-Data_pivot11 %>% pivot_longer(!Year,names_to="Course_platform",values_to="count")
+
+Data_pivot11<-Data_pivot11 %>% group_by(Course_platform,Year)%>% summarize(total = sum(count))
+
+
+
+# Course platform Used by Year
+
+Q <- ggplot(Data_pivot11, aes(x = reorder(Course_platform,-total), y =  total, fill=Year)) + ggtitle("Course_platform Used by Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) + scale_y_continuous(labels = ks)+
+  geom_bar(stat = "identity", position = "dodge")+
+  xlab('')
+
+Q
+Q<- ggplotly(Q)
+Q
+
+
+
+#Mean Salary by Year
+
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x)}
+
+S<-Data3 %>% group_by(Year)%>% summarize(Mean = round(mean(Salary,0, na.rm = TRUE)))
+S
+
+S1 <- ggplot(S, aes(x = Year, y =  Mean)) + ggtitle("Mean Salary by Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) +
+  geom_bar(stat = "identity", position = "dodge")+scale_y_continuous(labels = ks)
+S1
+
+S1<- ggplotly(S1)
+S1
+
+
+table(Data3$Age)
+table(Data3$Yrs_Code_Writing)
+table(Data3$Yrs_ML_used)
+
+
+# Specify that they are ordinal variables with the given levels
+Data3$Age <- factor(Data3$Age, order = TRUE, 
+                                    levels = c("18-21", "22-24", "25-29", "30-34","35-39","40-44","45-49","50-54","55-59","60-69","70+"))
+Data3$Age
+
+
+# Specify that they are ordinal variables with the given levels
+Data3$Yrs_Code_Writing <- factor(Data3$Yrs_Code_Writing, order = TRUE, 
+                    levels = c("< 1 year", "0 year", "1-2 years","3-5 years","5-10 years", "10-20 years","20+ years"))
+Data3$Yrs_Code_Writing
+
+
+# Specify that they are ordinal variables with the given levels
+Data3$Yrs_ML_used <- factor(Data3$Yrs_ML_used, order = TRUE, 
+                                 levels = c("< 1 year", "0 year", "1-2 years","2-3 years","3-4 years","4-5 years","5-10 years", "10-15 years", "10-20 years", "20+ years"))
+                                            
+
+## Regression Tree Model
+colnames(Data3)
+
+
+# Data4 that has not got NAs in Salary
+# Multiple choice answer is represented by row_sums in Data4
+
+Data3$Year<-factor(Data3$Year)
+Data3$Gender<-factor(Data3$Gender)
+Data3$Country<-factor(Data3$Country)
+Data3$Education<-factor(Data3$Education)
+Data3$Job_Title<-factor(Data3$Job_Title)
+Data3$Prog_Lang_Recommend<-factor(Data3$Prog_Lang_Recommend)
+
+
+Data4<-subset(Data3,Salary!="NA")
+Data4<- Data4[,c(2:12,266)]
+
+
+# Data5 that has NAs in Salary 
+Data5<- Data3[,c(2:12,266)]
+Data5<-subset(Data5,is.na(Data5$Salary))
+
+Data5<-subset(Data5,is.na(Data5$Salary))
+
+
+colnames(Data4)
+
+
+
+# REGRESSION TREE MODEL to PREDICT SALARY that has no NAs (Data4)
+# Predicting missing Salary using Regression Tree
+# Set a random seed so your "random" results are the same as me (optional)
+set.seed(101)
+Index1 <- createDataPartition(Data4$Salary,
+                              p=0.7,
+                              list=FALSE,
+                              times=1)
+
+# Create Training Data
+Data4.train <- Data4[Index1,]
+
+# Create Validation Data
+Data4.valid <-Data4[-Index1,]
+
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(pROC)
+
+#Grow a tree
+rtree.fit<-rpart(Salary~.,
+                 data=Data4.train,
+                 method="anova",
+                 control=rpart.control(minsplit=30,cp=0.001))
+
+# Examine the tree
+
+printcp(rtree.fit) 
+# par(mar=c(1,1,1,1))
+rsq.rpart(rtree.fit)
+plotcp(rtree.fit)
+summary(rtree.fit)
+
+
+# plot tree 
+plot(rtree.fit, uniform=TRUE, 
+     main="Regression Tree for satscore")
+text(rtree.fit, use.n=TRUE, all=TRUE, cex=1)
+
+# prune the tree based on minimum xerror
+pruned.rtree.fit<- prune(rtree.fit, cp= rtree.fit$cptable[which.min(rtree.fit$cptable[,"xerror"]),"CP"])
+printcp(pruned.rtree.fit) 
+
+# plot the pruned tree using prp() in the rpart.plot package 
+prp(pruned.rtree.fit, main="Pruned Regression Tree for Salary",cex=0.5)
+
+# prune the tree based on 1 SE error 
+pruned2.rtree.fit<- prune(rtree.fit, cp=.00273)
+
+# plot the pruned tree using prp() in the rpart.plot package
+prp(pruned2.rtree.fit, main="Pruned2 Regression Tree Salary",cex=0.7)
+
+#original tree
+cor(predict(rtree.fit, newdata=Data4.valid),Data4.valid$Salary)^2
+
+#pruned tree#1
+cor(predict(pruned.rtree.fit, newdata=Data4.valid),Data4.valid$Salary)^2
+
+#pruned tree#2
+cor(predict(pruned2.rtree.fit, newdata=Data4.valid),Data4.valid$Salary)^2
+
+# Neither original multiple regression nor smaller pruned tree is doing well. 
+# 34-37 % of variability in dependent variable (Salary) can be explained by the independent variable of regression tree of this scenario.
+# However, it is decided not to continue executing the rest of the plan of this scenario (scoring NA'ed Salary at Data5.
+
+
+# RANDOM FOREST STORY
+
+# Mean value across the 18-19-20 is found $50301
+# If salary>=mean salary of (18-19-20), turn salary to 1.
+
+
+
+# Random Forest
+
+Data6<-read.csv("Data3.csv",na.strings = c("","NA","?"))
+
+# Create Salary category and factorize it
+
+
+Data6$Salary[Data6$Salary<50301]<-0
+Data6$Salary[Data6$Salary>=50301]<-1
+Data6$Salary<-factor(Data6$Salary)
+
+# Specify that they are ordinal variables with the given levels
+
+Data6$Age <- factor(Data6$Age, order = TRUE, 
+                    levels = c("18-21", "22-24", "25-29", "30-34","35-39","40-44","45-49","50-54","55-59","60-69","70+"))
+Data6$Age
+
+
+# Specify that they are ordinal variables with the given levels
+Data6$Yrs_Code_Writing <- factor(Data6$Yrs_Code_Writing, order = TRUE, 
+                                 levels = c("< 1 year", "0 year", "1-2 years","3-5 years","5-10 years", "10-20 years","20+ years"))
+Data6$Yrs_Code_Writing
+
+
+# Specify that they are ordinal variables with the given levels
+Data6$Yrs_ML_used <- factor(Data3$Yrs_ML_used, order = TRUE, 
+                            levels = c("< 1 year", "0 year", "1-2 years","2-3 years","3-4 years","4-5 years","5-10 years", "10-15 years", "10-20 years", "20+ years"))
+
+
+
+
+
+# Delete ID, Salary
+Data6<- Data6[,c(2:12,266)]
+str(Data6['Salary'])
+
+
+# install.packages
+
+# creating predictive models
+# install.packages("caret")
+# install.packages("randomForest")
+# install.packages("tidyverse")
+# install.packages("Hmisc")
+
+#load library
+
+library(caret)
+library(randomForest)
+# library(Hmisc)
+library(tidyverse)
+
+# Using DATA6$Salary as dependent variable
+summary(Data6)
+str(Data6)
+
+
+Data6<-na.omit(Data6)
+
+
+
+# Data partition with the Caret package
+
+set.seed(101)
+trainIndex<-createDataPartition(Data6$Salary,
+                                 p=0.7,
+                                 list=FALSE,
+                                 times=1)
+
+Data6.train<-Data6[trainIndex,]
+Data6.valid<-Data6[-trainIndex,]
+
+# Create a default random forest model
+#install.packages("nlme")
+library(nlme,warn.conflicts = FALSE)
+
+Data6_default<-train(Salary~.,
+                      data=Data6.train,
+                      method="rf",
+                      metric="Accuracy",
+                      ntree=3,
+                      na.action=na.exclude)
+
+print(Data6_default)
+ 
+ncol(Data6)
+
+table(Data6$Salary)
+
+# Variable importance
+varImp(Data6_default)
+
+# Evaluate model performance
+prediction<-predict(Data6_default,Data6.valid)
+confusionMatrix(prediction,Data6.valid$Salary)
+
+
+
+length(prediction)
+length(Data6.valid$Salary)
+
+
+# unload and then load library (dplyr)
+
+
+
+# Paid above mean salary
+
+ks <- function (x) { number_format(accuracy = 1,
+                                   scale = 1/1000,
+                                   suffix = "k",
+                                   big.mark = ",")(x)}
+
+
+V<-Data4 %>% group_by(Country, Gender, Year)%>%
+  summarize(Mean_Salary= round(mean(Salary,0, na.rm = TRUE)))
+
+V1<-filter(V,Mean_Salary>=50301)
+
+
+
+V1 <- ggplot(V1, aes(x = Country, y =  Mean_Salary, fill=Gender)) + ggtitle("Paid above mean salary by Country, Gender,  and Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) +
+  geom_bar(stat = "identity", position = "stack")+facet_grid(vars(Year)) + scale_y_continuous(labels = ks)
+V1
+
+V1<- ggplotly(V1)
+V1
+
+
+# Paid below mean salary
+
+
+V2<-filter(V,Mean_Salary<=50301)
+
+
+V2 <- ggplot(V2, aes(x = Country, y =  Mean_Salary, fill=Gender)) + ggtitle("Paid below mean salary by Country, Gender,  and Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) +
+  geom_bar(stat = "identity", position = "stack")+facet_grid(vars(Year)) + scale_y_continuous(labels = ks)
+V2
+
+V2<- ggplotly(V2)
+V2
+
+
+
+
+# Paid above mean salary by  Age, Job_Title, Years_ML_used
+
+Y<-Data4 %>% group_by(Age, Job_Title, Year)%>%
+  summarize(Mean_Salary= round(mean(Salary,0, na.rm = TRUE)))
+
+Y1<-filter(Y,Mean_Salary>=50301)
+
+
+
+Y1 <- ggplot(Y1, aes(x = Age, y =  Mean_Salary, fill=Job_Title)) + ggtitle("Paid above mean salary by Age, Job_Title,  and Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) +
+  geom_bar(stat = "identity", position = "stack")+facet_grid(vars(Year)) + scale_y_continuous(labels = ks)
+Y1
+
+Y1<- ggplotly(Y1)
+Y1
+
+
+
+
+# Paid below mean salary by  Age, Job_Title, Years_ML_used
+
+Y2<-filter(Y,Mean_Salary<=50301)
+
+
+
+Y2 <- ggplot(Y2, aes(x = Age, y =  Mean_Salary, fill=Job_Title)) + ggtitle("Paid below mean salary by Age, Job_Title,  and Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) +
+  geom_bar(stat = "identity", position = "stack")+facet_grid(vars(Year)) + scale_y_continuous(labels = ks)
+Y2
+
+Y2<- ggplotly(Y2)
+Y2
+
+
+
+##############################
+
+
+# Paid above mean salary by  Age, Education, Year
+
+ED<-Data4 %>% group_by(Age, Education, Year)%>%
+  summarize(Mean_Salary= round(mean(Salary,0, na.rm = TRUE)))
+
+ED1<-filter(ED,Mean_Salary>=50301)
+
+
+
+ED1 <- ggplot(ED1, aes(x = Age, y =  Mean_Salary, fill=Education)) + ggtitle("Paid above mean salary by Age, Education,  and Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) +
+  geom_bar(stat = "identity", position = "stack")+facet_grid(vars(Year)) + scale_y_continuous(labels = ks)
+ED1
+
+ED1<- ggplotly(ED1)
+ED1
+
+
+
+# Paid below mean salary by  Age, Education, Year
+
+ED2<-Data4 %>% group_by(Age, Education, Year)%>%
+  summarize(Mean_Salary= round(mean(Salary,0, na.rm = TRUE)))
+
+ED3<-filter(ED2,Mean_Salary<=50301)
+
+
+
+ED3 <- ggplot(ED3, aes(x = Age, y =  Mean_Salary, fill=Education)) + ggtitle("Paid below mean salary by Age, Education,  and Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) +
+  geom_bar(stat = "identity", position = "stack")+facet_grid(vars(Year)) + scale_y_continuous(labels = ks)
+ED3
+
+ED3<- ggplotly(ED3)
+ED3
+
+
+# Paid above mean salary by  Gender, Education, Year
+
+ED4<-Data4 %>% group_by(Gender, Education, Year)%>%
+  summarize(Mean_Salary= round(mean(Salary,0, na.rm = TRUE)))
+
+ED5<-filter(ED4,Mean_Salary>=50301)
+
+
+
+ED5 <- ggplot(ED5, aes(x = Gender, y =  Mean_Salary, fill=Education)) + ggtitle("Paid above mean salary by Gender, Education,  and Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) +
+  geom_bar(stat = "identity", position = "stack")+facet_grid(vars(Year)) + scale_y_continuous(labels = ks)
+ED5
+
+ED5<- ggplotly(ED5)
+ED5
+
+
+
+# Paid above mean salary by  Gender, Education, Year
+
+ED6<-Data4 %>% group_by(Gender, Education, Year)%>%
+  summarize(Mean_Salary= round(mean(Salary,0, na.rm = TRUE)))
+
+ED7<-filter(ED6,Mean_Salary<=50301)
+
+
+
+ED7 <- ggplot(ED7, aes(x = Gender, y =  Mean_Salary, fill=Education)) + ggtitle("Paid below mean salary by Gender, Education,  and Year") +
+  theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) +
+  geom_bar(stat = "identity", position = "stack")+facet_grid(vars(Year)) + scale_y_continuous(labels = ks)
+ED7
+
+ED7<- ggplotly(ED7)
+ED7
+
+
+# Data Scientist Mean salary by  Gender, Education, Year
+
+ED8<-Data4 %>% group_by(Gender, Education, Year,Job_Title)%>%
+  summarize(Mean_Salary= round(mean(Salary,0, na.rm = TRUE)))
+
+ED9<-filter(ED8,Job_Title=='Data Scientist')
+
+
+
+ED10<- ggplot(ED9, aes(x = Gender, y =  Mean_Salary, fill = Education, label = Mean_Salary), size = 0.01) + 
+  ggtitle("Data Scientist mean salary by Gender, Education,  and Year") +
+  theme(axis.text.x = element_text(size = 0.001, angle=90, hjust=1)) +
+  geom_bar(stat = "identity", position = "stack")+facet_grid(vars(Year)) + scale_y_continuous(labels = ks)+
+  geom_text(aes(label = Mean_Salary), position = position_stack(vjust = 0.5))
+  
+ED10
+
+ED10<- ggplotly(ED10)
+ED10
+
+
+# Linear Regression 
+
+
+# Linear Regression MODEL to PREDICT SALARY that has no NAs (Data4)
+# Set a random seed so your "random" results are the same as me (optional)
+
+
+
+## Explore the response variable Salary
+#Let's check for the distribution of response variable 'Salary'. 
+#The following figure shows the three distributions of 
+#'Salary' original, log transformation and square root transformation. 
+# We can see that both 'log' does a decent job to transform 'Salary' distribution closer to normal. 
+# In the following model, I have selected 'log' transformation of Salary
+
+ggplot(Data4.train, aes(Salary)) + geom_density(fill="blue")
+ggplot(Data4.train, aes(log(Salary))) + geom_density(fill="blue")
+ggplot(Data4.train, aes(sqrt(Salary))) + geom_density(fill="blue")
+
+
+# Linear Model Building
+
+# Now as a first step we will fit the multiple regression models. 
+# We will start by taking all input variables in the linear regression.
+
+#Let's make default model.
+
+install.packages("stats")
+library(stats)
+
+Data7<-na.omit(Data4)
+options(scipen = 999)
+
+
+Data7$Age <- as.factor(Data7$Age)
+Data7$Gender <- as.factor(Data7$Gender)
+Data7$Country <- as.factor(Data7$Country)
+Data7$Education <- as.factor(Data7$Education)
+Data7$Job_Title <- as.factor(Data7$Job_Title)
+Data7$Yrs_Code_Writing <- as.factor(Data7$Yrs_Code_Writing)
+Data7$Prog_Lang_Recommend <- as.factor(Data7$Prog_Lang_Recommend)
+Data7$Yrs_ML_used <- as.factor(Data7$Yrs_ML_used)
+Data7$ML_used <- as.factor(Data7$ML_used)
+
+Data7$Salary[Data7$Salary==0] <- 1
+
+Data7$Salary <- as.numeric(gsub("\\.", "", Data7$Salary))
+Data7$row_sums <- as.numeric(gsub("\\.", "", Data7$row_sums))
+
+table(Data7$Salary)
+
+table(Data7$row_sums)
+
+
+
+
+# Data7$Salary<-as.numeric(Data7$Salary)
+
+
+
+set.seed(101)
+Index2 <- createDataPartition(Data7$Salary,
+                              p=0.7,
+                              list=FALSE,
+                              times=1)
+
+# Create Training Data
+Data7.train <- Data7[Index2,]
+
+# Create Validation Data
+Data7.valid <-Data7[-Index2,]
+
+# linear_model = lm(Salary~., data=Data7.train)
+
+linear_model = lm(log(Salary)~., data=Data7.train)
+
+summary(linear_model)
+
+par(mfrow=c(2,2))
+plot(linear_model)
+
+
+
+
+
+# Observation from summary (linear_model)
+
+# Is there a relationship between predictor and response variables?
+# We can answer this using F stats. This defines the collective effect of all predictor variables on the response variable. 
+# In this model, F=191.5 is far greater than 1, and so it can be concluded that there is a relationship between predictor and response variable (logSalary).
+
+# Which of the predictor variables are significant?
+# Based on the 'p-value' we can conclude on this. The lesser the 'p' value the more significant is the variable. 
+# From the 'summary' dump we can see that predictors having p<0.05 are statistical significant. 
+# Further improvement can be done by removing the non-significant variables from the model.
+
+# Is this model fit?
+# We can answer this based on R2 (multiple-R-squared) value as it indicates how much variation is captured by the model. 
+# R2 closer to 1 indicates that the model explains the large value of the variance of the model and hence a good fit. 
+# In this case, the value is 0.4071 (not close to 1) and hence the model is not a good fit.
+
+
+pred_linear_model <- predict(linear_model, newdata = Data7.valid)
+
+rmse <- sqrt(sum((exp(pred_linear_model) - Data7.valid$Salary)^2)/length(Data7.valid$Salary))
+c(RMSE = rmse, R2=summary(linear_model)$r.squared)
+
+par(mfrow=c(1,1))
+plot(Data7.valid$Salary, exp(pred_linear_model))
+
+
+
+
+# remove the less significant feature
+# linear_model2 = update(linear_model, ~.-Age^4, -CountryBangladesh) 
+# summary(linear_model2) 
+
+# Reference 3 in the word document
+
+
+
+
+
+
+
+
+# ED11<-Data4 %>% group_by(Age, Education, Year, Prog_Lang_Recommend, Country, Gender)%>%
+#   summarize(Mean_Salary= round(mean(Salary,0, na.rm = TRUE)))
+# 
+# ED11<-filter(ED11,Mean_Salary>=50301)
+# 
+# 
+# 
+# ED11 <- ggplot(ED11, aes(x = Prog_Lang_Recommend, y = Mean_Salary , fill=Gender)) + ggtitle("Paid above mean salary by Age, Education,  and Year") +
+#   theme(axis.text.x = element_text(size = 8, angle=90, hjust=1)) +
+#   geom_bar(stat = "identity", position = "stack")+facet_grid(vars(Year)) + scale_y_continuous(labels = ks)
+# ED11
+# 
+# ED11<- ggplotly(ED11)
+# ED11
+
+
+
+
+
+
+
+
+##################################below model is not working##################################333
+
+
+# Multi-Nominal Logistic Regression
+# nnet package did not work for this dataset....
+
+Data8<-Data_single
+
+
+Data8$Age <- gsub("70+","70-79",Data8$Age)
+Data8$Age <- gsub("70-79-79","70-79",Data8$Age)
+
+
+table(Data8$Age)
+
+Data8$Gender <-gsub("Man","Male",Data8$Gender)
+Data8$Gender<-gsub("Nonbinary","Other",Data8$Gender)
+Data8$Gender<-gsub("Prefer not to say","Other",Data8$Gender)
+Data8$Gender<-gsub("Prefer to self-describe","Other",Data8$Gender)
+Data8$Gender<-gsub("Woman","Female",Data8$Gender)
+
+
+Data8$Country<-gsub("I do not wish to disclose my location","Other",Data8$Country)
+
+Data8$Education<-gsub("Some college/university study without earning a bachelors degree","No formal education past high school",Data8$Education)
+
+Data8$Job_Title<-gsub("Currently not employed","Not employed",Data8$Job_Title)
+
+
+
+Data8$Yrs_Code_Writing<-gsub("< 1 years","< 1 year",Data8$Yrs_Code_Writing)
+Data8$Yrs_Code_Writing<-gsub("I have never written code","0 year",Data8$Yrs_Code_Writing)
+Data8$Yrs_Code_Writing<-gsub("0 year and I do not want to learn","0 year",Data8$Yrs_Code_Writing)
+Data8$Yrs_Code_Writing<-gsub("0 year but I want to learn","0 year",Data8$Yrs_Code_Writing)
+Data8$Yrs_Code_Writing<-gsub("20-30","20+",Data8$Yrs_Code_Writing)
+Data8$Yrs_Code_Writing<-gsub("30-40 years","20+ years",Data8$Yrs_Code_Writing)
+Data8$Yrs_Code_Writing<-gsub("40","20",Data8$Yrs_Code_Writing)
+
+table(Data8$Yrs_Code_Writing)
+
+
+Data8$Prog_Lang_Recommend<-gsub("None","Other",Data8$Prog_Lang_Recommend)
+
+
+
+Data8$Yrs_ML_used<-gsub("0 years","0 year",Data8$Yrs_ML_used)
+Data8$Yrs_ML_used<-gsub("< 1 years","< 1 year",Data8$Yrs_ML_used)
+Data8$Yrs_ML_used<-gsub("20 or more years","20+ years",Data8$Yrs_ML_used)
+Data8$Yrs_ML_used<-gsub("Under 1 year","< 1 year",Data8$Yrs_ML_used)
+Data8$Yrs_ML_used<-gsub("I do not use machine learning methods","0 year",Data8$Yrs_ML_used)
+Data8$Yrs_ML_used<-gsub("I have never studied machine learning and I do not plan to","0 years",Data8$Yrs_ML_used)
+Data8$Yrs_ML_used<-gsub("I have never studied machine learning but plan to learn in the future","0 year",Data8$Yrs_ML_used)
+
+Data8$ML_used<-gsub("I do not know","No",Data8$ML_used)
+Data8[Data8=="No (we do not use ML methods)"]<-"No"
+Data8[Data8=="We are exploring ML methods (and may one day put a model into production)"]<-"No"
+Data8[Data8=="We recently started using ML methods (i.e., models in production for less than 2 years)"]<-"Yes"
+Data8[Data8=="We have well established ML methods (i.e., models in production for more than 2 years)"]<-"Yes"
+Data8[Data8=="We use ML methods for generating insights (but do not put working models into production)"]<-"No"
+
+
+
+Data8[Data8=="$0-999"]<-"0-1,000"
+Data8[Data8=="> $500,000"]<-"500,000+"
+Data8[Data8=="1,000-1,999"]<-"1-2,000"
+Data8[Data8=="10,000-14,999"]<-"10-15,000"
+Data8[Data8=="100,000-124,999"]<-"100-125,000"
+Data8[Data8=="125,000-149,999"]<-"125-150,000"
+Data8[Data8=="15,000-19,999"]<-"15-20,000"
+Data8[Data8=="150,000-199,999"]<-"150-200,000"
+Data8[Data8=="2,000-2,999"]<-"2-3,000"
+Data8[Data8=="20,000-24,999"]<-"20-25,000"
+Data8[Data8=="200,000-249,999"]<-"200-250,000"
+Data8[Data8=="25,000-29,999"]<-"25-30,000"
+Data8[Data8=="250,000-299,999"]<-"250-300,000"
+Data8[Data8=="3,000-3,999"]<-"3-4,000"
+Data8[Data8=="30,000-39,999"]<-"30-40,000"
+Data8[Data8=="300,000-500,000"]<-"300-500,000"
+Data8[Data8=="4,000-4,999"]<-"4-5,000"
+Data8[Data8=="40,000-49,999"]<-"40-50,000"
+Data8[Data8=="5,000-7,499"]<-"5-7,500"
+Data8[Data8=="50,000-59,999"]<-"50-60,000"
+Data8[Data8=="60,000-69,999"]<-"60-70,000"
+Data8[Data8=="7,500-9,999"]<-"7.5-10,000"
+Data8[Data8=="70,000-79,999"]<-"70-80,000"
+Data8[Data8=="80,000-89,999"]<-"80-90,000"
+Data8[Data8=="90,000-99,999"]<-"90-100,000"
+Data8[Data8=="I do not wish to disclose my approximate yearly compensation"]<-"None"
+
+Data8[Data8=="250-300,000"]<-"250,000+"
+Data8[Data8=="300-400,000"]<-"250,000+"
+Data8[Data8=="300-500,000"]<-"250,000+"
+Data8[Data8=="400-500,000"]<-"250,000+"
+Data8[Data8=="500,000+"]<-"250,000+"
+
+table(Data8$Salary)
+
+Data8<- Data8[,c(2:12)]
+
+str(Data8)
+
+# Format categorical variables
+
+
+Data8$Year <- factor(Data8$Year)
+Data8$Age <- as.factor(Data8$Age)
+Data8$Gender <- as.factor(Data8$Gender)
+Data8$Country <- as.factor(Data8$Country)
+Data8$Education <- as.factor(Data8$Education)
+Data8$Job_Title <- as.factor(Data8$Job_Title)
+Data8$Yrs_Code_Writing <- as.factor(Data8$Yrs_Code_Writing)
+Data8$Prog_Lang_Recommend <- as.factor(Data8$Prog_Lang_Recommend)
+Data8$Yrs_ML_used <- as.factor(Data8$Yrs_ML_used)
+Data8$ML_used <- as.factor(Data8$ML_used)
+Data8$Salary <- as.factor(Data8$Salary)
+
+
+# # checking multi-colinearity with GVIF
+install.packages("car")
+library(car)
+
+# Multi-collinearity check
+
+vif(glm(formula=Salary~.,family=binomial(link="logit"),data=Data8))
+
+# Since, gvif is less than 10, there is not multi-collinearity issue in Data8
+
+
+
+
+install.packages('haven')
+library(haven)
+
+# Load the jmv package for frequency table
+install.packages("jmv")
+library(jmv)
+
+# Use the descritptives function to get the descritptive data
+descriptives(Data8, vars = vars(Year, Age, Gender, Country, Education, Job_Title, Yrs_Code_Writing, Prog_Lang_Recommend, Yrs_ML_used, ML_used, Salary), freq = TRUE)
+
+# To see the crosstable, we need CrossTable function from gmodels package
+install.packages("gmodels")
+library(gmodels)
+# Build a crosstable between Salary and Gender
+CrossTable(Data8$Salary, Data8$Gender)
+
+
+
+
+# Load the multinom package
+install.packages("nnet")
+library(nnet)
+
+# Since we are going to use 0-1,000 as the reference group, we need relevel the group.
+Data8$Salary <- relevel(Data8$Salary, ref="0-1,000")
+levels(Data8$Salary)
+
+Data8<-na.omit(Data8)
+
+
+set.seed(101)
+Index3 <- createDataPartition(Data8$Salary,
+                              p=0.7,
+                              list=FALSE,
+                              times=1)
+
+# Create Training Data
+Data8.train <- Data8[Index3,]
+
+# Create Validation Data
+Data8.valid <-Data8[-Index3,]
+
+
+# Run a multinomial model
+#
+
+                     
+                     
+# model=TRUE, size=0, maxit=1000,nnet.MaxNWts=3807)
+
+multinominal_log_reg_model <- multinom(Salary ~ Year + Age + Gender + Country + Education + Job_Title + Yrs_Code_Writing + Prog_Lang_Recommend + Yrs_ML_used + ML_used, 
+                                       data = Data8.train, linout = FALSE, entropy = FALSE,
+                                       censored = FALSE, decay = 0,
+                                       maxit = 100, Hess = FALSE, trace = TRUE,
+                                       abstol = 1.0e-4, reltol = 1.0e-8, MaxNWts=3807)
+
+
+# remove.packages("nnet")
+# install.packages("nnet")
+# library(nnet)
+
+# maxit=100,nnet.MaxNWts=1000, model=TRUE)
+
+################################################################
+##### It is not running from down below ######
+
+summary(multinominal_log_reg_model)
+
+
+# Check the Z-score for the model (wald Z)
+z <- summary(multinominal_log_reg_model)$coefficients/summary(multinominal_log_reg_model)$standard.errors
+z
+
+# 2-tailed z test
+p <- (1 - pnorm(abs(z), 0, 1)) * 2
+p
+
+
