@@ -1,0 +1,382 @@
+# install.packages('quanteda')
+# install.packages("stopwords")
+# install.packages("quanteda.textstats")
+# install.packages("quanteda.textplots")
+# install.packages('topicmodels')
+# install.packages('tidytext')
+# install.packages("ggplot2")
+# install.packages("tidyverse")
+# install.packages('rpart')
+# install.packages('rpart.plot')
+# install.packages("quanteda.textmodels")
+# install.packages("e1071")
+# install.packages("caTools")
+# install.packages("ROCR")
+
+
+library(quanteda)
+library(stopwords)
+library(quanteda.textstats)
+library(quanteda.textplots)
+library(topicmodels)
+library(tidytext)
+library(ggplot2)
+library(tidyverse)
+library(caret)
+library(pROC)
+library(rpart)
+library(rpart.plot)
+library(quanteda.textmodels)
+library(e1071)
+library(caTools)
+library(ROCR)
+
+# Read Data
+dfYKD <- read.csv('gastext.csv',stringsAsFactors = F, na.strings=c("NA",""))
+summary(dfYKD)
+dim(dfYKD) # 287 row, 15 columns
+View(dfYKD)
+
+####################################   Answer1   ####################################
+
+# Data pre-processing
+
+myCorpus<-corpus(dfYKD$Comment)
+summary(myCorpus)
+
+
+# Create a data feature matrix, dfm
+# myDfm is matrix
+# it is created based on unigram
+
+myDfm <- dfm(myCorpus)
+topfeatures(myDfm)
+View(myDfm)
+dim(myDfm)
+
+
+# Remove stop words
+
+
+# Remove "english" stopwords, additional user-defined stop word, period and comma are removed,manually removing stopwords1, and
+# Perform stemming, so 'showers' and 'shower','points' and 'point'  become a single feature
+
+# manually removing stopwords1
+stopwords1 <- c("1","2","3","1000")
+stopwords2 <- c("???","t","don","itê","per","donêt","just","anyth","everyth","much","one","natso","use","can","get")
+
+
+myDfm <- dfm(myCorpus,
+             remove_punc=T,
+             remove=c(stopwords('english'),stopwords1, stopwords2),
+             stem=T)
+
+topfeatures(myDfm)
+dim(myDfm)
+
+#remove very infrequent words
+myDfm <- dfm_trim(myDfm,
+                  min_termfreq = 3,
+                  min_docfreq = 2)
+
+dim(myDfm)
+
+tstat_freq <- textstat_frequency(myDfm)
+head(tstat_freq)
+
+topfeatures(myDfm, 200)
+
+
+#create a wordcloud
+textplot_wordcloud(myDfm, max_words = 200,labelsize =1.5)
+
+
+####################################   Answer2   ####################################
+
+##1 price: Term similarity, method correlation
+term_sim_price  <- textstat_simil(myDfm, 
+                                  selection='price', # find similar terms to selection price
+                                  margin='feature',
+                                  method='correlation') # can be used alternative methods cosine
+
+
+as.list(term_sim_price, n=5) # the top 5 terms that are most related to "price"
+
+
+##2 price: Term similarity, method cosine
+term_sim_price  <- textstat_simil(myDfm, 
+                                  selection='price', # find similar terms to selection price
+                                  margin='feature',
+                                  method='cosine') 
+
+as.list(term_sim_price, n=5) # the top 5 terms that are most related to "price"
+
+
+####################################   Answer3   ####################################
+
+##1 service: Term similarity, method correlation
+term_sim_servic  <- textstat_simil(myDfm, 
+                                   selection='servic', # find similar terms to selection servic
+                                   margin='feature',
+                                   method='correlation') # can be used alternative methods cosine
+
+
+as.list(term_sim_servic, n=5) # the top 5 terms that are most related to "servic"
+
+
+##2 price: Term similarity, method cosine
+term_sim_servic  <- textstat_simil(myDfm, 
+                                   selection='servic', # find similar terms to selection servic
+                                   margin='feature',
+                                   method='cosine') 
+
+as.list(term_sim_servic, n=5) # the top 5 terms that are most related to "servic"
+
+
+
+####################################   Answer4   ####################################
+
+
+##remove some common words and zero rows
+myDfm <- dfm_remove(myDfm, c('shower','point','productx','servic'))
+myDfm <- as.matrix(myDfm)
+myDfm <-myDfm[which(rowSums(myDfm)>0),]
+myDfm <- as.dfm(myDfm)
+
+
+# Topic (number of topic k) modeling based on the original DFM
+myLda <- LDA(myDfm, k=4, control = list(seed=101))
+myLda
+
+# Term-topic probabilities
+myLda_td <- tidy(myLda)
+myLda_td
+
+top_terms <- myLda_td %>%  
+  group_by(topic) %>%  
+  top_n(9, beta) %>%  # choose the top 9 that has highest beta
+  ungroup() %>%  
+  arrange(topic, -beta) # descending order of beta
+
+top_terms %>%  
+  mutate(term = reorder(term, beta)) %>%  
+  ggplot(aes(term, beta, fill = factor(topic)))+  
+  geom_bar(stat = "identity", show.legend =FALSE)+  
+  facet_wrap(~ topic, scales = "free")+  coord_flip()
+
+
+
+
+####################################   Answer5   ####################################
+####################################   Decision tree 1 - Non Text   ####################################
+
+#Dataframe creation for Non Text model
+# Model 1 only uses non-text information 
+# (i.e., all other columns except the Comment column)
+
+dfYKD1 <- dfYKD[3:15]
+
+# Target variable shall be factor
+# Binary variablesshall befactor 
+dfYKD1[,1:6]<-lapply(dfYKD1[,1:6],factor)
+dfYKD1[,8:13]<-lapply(dfYKD1[,8:13],factor)
+str(dfYKD1)
+
+set.seed(103)
+
+# Data partition
+# Split up the sample, basically randomly assigns a booleans to a new column "sample"
+# SplitRatio = percent of sample==TRUE
+Partition1 <- sample.split(dfYKD1$Target, SplitRatio = 0.7)
+Partition1 
+
+# Create Training Data
+dfYKD1.train1 = subset(dfYKD1, Partition1  == TRUE)
+
+# Create Validation Data
+dfYKD1.valid1 = subset(dfYKD1, Partition1  == FALSE)
+
+# Build a decision tree model
+tree.modelYKD1 <- rpart(Target~.,method="class",data=dfYKD1.train1)
+
+# Display decision tree results
+printcp(tree.modelYKD1)
+
+# Display decision tree plot
+prp(tree.modelYKD1,type=2,extra=106)
+
+#Evaluation model performance using the validation dataset
+#Predict the default probabilities based on the validataion dataset
+pred.probabilities1 <- predict(tree.modelYKD1,dfYKD1.valid1)
+pred.probabilities1 <- as.data.frame(pred.probabilities1)
+
+#Turn the default probabilities to binary, threshold is 0.5
+joiner <- function(x){
+  if (x>=0.5){
+    return('Yes')
+  }else{
+    return("No")
+  }
+}
+
+pred.probabilities1$Result <- sapply(pred.probabilities1$`1`,joiner)
+
+# Create the confusion matrix
+print("The confusion matrix is:")
+## [1] "The confusion matrix is:"
+print(table(pred.probabilities1$Result,dfYKD1.valid1$Target))
+
+accuracy1<- (10+41)/(10+7+28+41)
+accuracy1
+
+# Create the ROC curve
+pred1 <- prediction(pred.probabilities1$`1`,dfYKD1.valid1$Target)
+perform1 <- performance(pred1, "tpr", "fpr")
+perform1
+plot(perform1)
+abline(a=0,b=1)
+
+
+# Calculate and print AUC value
+auc1 <- performance(pred1, measure="auc")
+auc1 <- auc1@y.values[[1]]
+print(paste("AUC for the Non Text tree model is:", auc1))
+
+####################################   Decision tree 2 -  Non Text and Text   ####################################
+
+
+#Dataframe creation for Model2
+# Model 2 uses non-text and text information 
+
+dfYKD2<-dfYKD[3:15]
+
+# convert the binary variables  to a factor 
+dfYKD2[,1:6]<-lapply(dfYKD2[,1:6],factor)
+dfYKD2[,8:13]<-lapply(dfYKD2[,8:13],factor)
+str(dfYKD2)
+
+
+# Prepare the corpus by adding the non text columns to my corpus
+# There is high dimensionality and sparcity with myDfm. To deal with high dimensionality, we apply SVD.
+# once you do SVD, you shrink number of columns. SVD gives you matrix representation of text
+
+colnames(dfYKD2)
+summary(myCorpus)
+
+docvars(myCorpus,'Target')<-dfYKD2$Target
+docvars(myCorpus,'Service_flag')<-dfYKD2$Service_flag
+docvars(myCorpus,'CustType_flag')<-dfYKD2$CustType_flag
+docvars(myCorpus,'Contact_flag')<-dfYKD2$Contact_flag
+docvars(myCorpus,'new_flag')<-dfYKD2$new_flag
+docvars(myCorpus,'Choice_flag')<-dfYKD2$Choice_flag
+docvars(myCorpus,'Loyal_Status')<-dfYKD2$Loyal_Status
+docvars(myCorpus,'Comp_card_flag')<-dfYKD2$Comp_card_flag
+docvars(myCorpus,'AcctType_flag')<-dfYKD2$AcctType_flag
+docvars(myCorpus,'Contact_Flag2')<-dfYKD2$Contact_Flag2
+docvars(myCorpus,'HQ_flag')<-dfYKD2$HQ_flag
+docvars(myCorpus,'Multi_flag')<-dfYKD2$Multi_flag
+docvars(myCorpus,'NewCust_Flag')<-dfYKD2$NewCust_Flag
+
+summary(myCorpus)
+
+
+stopwords3 <- c("???","t","1","2","3","1000","per","donêt","just","anyth","everyth","much","one","natso","itê")
+
+myDfm2 <- dfm(myCorpus,
+              remove_punc=T,
+              remove=c(stopwords('english'),stopwords3),
+              stem=T)
+
+topfeatures(myDfm2)
+dim(myDfm2)
+
+#remove very infrequent words
+myDfm2  <- dfm_trim(myDfm2,
+                    min_termfreq = 3,
+                    min_docfreq = 2)
+
+dim(myDfm2)
+
+#normalize, tfidf 
+# To penalize. To have weight adjusted matrix
+# Weight a dfm by tf-idf
+
+myDfm2_tfidf <- dfm_tfidf(myDfm2)
+View(myDfm2_tfidf)
+dim(myDfm2)
+print(myDfm2_tfidf)
+
+# Perform SVD for dimension reduction
+# Choose the number of reduced dimensions as 8
+#SVD
+
+SVDYKD <- textmodel_lsa(myDfm2_tfidf, nd=8)
+head(SVDYKD $docs)
+
+#create a complete dataframe with text
+FinaldfYKD<- cbind (dfYKD2,
+                    as.data.frame(SVDYKD$docs))
+
+
+# Set a random see so your "random" results are the same as me (optional)
+set.seed(103)
+
+
+# Data partition
+# Split up the sample, basically randomly assigns a booleans to a new column "sample"
+# SplitRatio = percent of sample==TRUE
+Partition2 <- sample.split(FinaldfYKD$Target, SplitRatio = 0.7)
+Partition2 
+
+# Create Training Data
+FinaldfYKD.train = subset(FinaldfYKD, Partition2  == TRUE)
+
+# Create Validation Data
+FinaldfYKD.valid = subset(FinaldfYKD, Partition2  == FALSE)
+
+# Build a decision tree model
+tree.modelYKD2 <- rpart(Target~.,method="class",data=FinaldfYKD.train)
+
+# Display decision tree results
+printcp(tree.modelYKD2)
+
+# Display decision tree plot
+prp(tree.modelYKD2,type=2,extra=106)
+
+#Evaluation model performance using the validation dataset
+#Predict the default probabilities based on the validataion dataset
+pred.probabilities2 <- predict(tree.modelYKD2,FinaldfYKD.valid)
+pred.probabilities2 <- as.data.frame(pred.probabilities2)
+
+#Turn the default probabilities to binary, threshold is 0.5
+joiner <- function(x){
+  if (x>=0.5){
+    return('Yes')
+  }else{
+    return("No")
+  }
+}
+
+pred.probabilities2$Result <- sapply(pred.probabilities2$`1`,joiner)
+
+# Create the confusion matrix
+print("The confusion matrix is:")
+## [1] "The confusion matrix is:"
+print(table(pred.probabilities2$Result,FinaldfYKD.valid$Target))
+
+accuracy2<- (18+34)/(18+34+20+14)
+accuracy2
+
+# Create the ROC curve
+pred2 <- prediction(pred.probabilities2$`1`,FinaldfYKD.valid$Target)
+perform2 <- performance(pred2, "tpr", "fpr")
+perform2
+plot(perform2)
+abline(a=0,b=1)
+
+
+# Calculate and print AUC value
+auc2 <- performance(pred2, measure="auc")
+auc2 <- auc2@y.values[[1]]
+print(paste("AUC for the Text and Non Text tree model is:", auc2))
+
