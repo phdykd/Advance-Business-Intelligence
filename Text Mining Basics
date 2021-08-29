@@ -1,0 +1,164 @@
+setwd("C:/Users/admin/Desktop/UNCC/Spring 2021/6211/Class R Excercise")
+
+# Read data
+text <- read.csv('simple_text.csv',stringsAsFactors = F)
+
+# Data pre-processing
+# install.packages('quanteda')
+library(quanteda)
+
+myCorpus <- corpus(text$Text)
+summary(myCorpus)
+
+# Create a data feature matrix, dfm
+myDfm <- dfm(myCorpus)
+
+# myDfm is matrix
+# it is created based on unigram
+view(myDfm)
+
+topfeatures(myDfm)
+
+# Create an alternative dfm based on bigram
+myTokens <- tokens(myCorpus)
+# n=1:2, i will have unigram and will consider bigram as well
+bigram <- tokens_ngrams(myTokens,n=1:2)
+myDfm_bigram <- dfm(bigram)
+View(myDfm_bigram)
+dim(myDfm)
+dim(myDfm_bigram)  # dimensionality increased quite significant to 72
+
+
+
+# Remove stop words
+# install.packages("stopwords")
+library(stopwords)
+myDfm <- dfm(myCorpus, 
+             remove = c(stopwords("english")))  # and a my for have been removed
+topfeatures(myDfm) 
+
+# Remove an additional user-defined stop word
+myDfm <- dfm(myCorpus, 
+             remove = c(stopwords("english"),'.'))  # period removed
+topfeatures(myDfm)
+
+# Perform stemming, so 'banana' and 'bananas' become a single feature
+myDfm <- dfm(myCorpus, 
+             remove = c(stopwords("english"),'.'),
+             stem = T)
+topfeatures(myDfm)
+dim(myDfm)
+View(myDfm)
+
+# To penalize. To have weight adjusted matrix
+# Weight a dfm by tf-idf
+myDfm_tfidf <- dfm_tfidf(myDfm)
+View(myDfm_tfidf)
+
+# between ate (1/6) and banana (3/6), after matrix, banana has more weights and penalized more. Banana has lower number
+
+
+# Perform SVD
+# install.packages('quanteda.textmodels')
+library(quanteda.textmodels)
+mySvd <- textmodel_lsa(myDfm_tfidf)
+mySvd$docs[]
+
+# Predict SVD for a new sentence
+newDfm <- dfm(c('My puppy is very cute'))
+newDfm
+
+newDfm <- dfm_select(newDfm,
+                     pattern = myDfm)
+newDfm
+
+# Technically we should use newDfm_tfidf
+# However, tf_idf becomes NA for a single document corpus
+# newDfm_tfidf <- dfm_tfidf(newDfm)
+newSvd <- predict(mySvd,newdata=newDfm)
+newSvd$docs[]
+
+# Topic modeling
+# install.packages('topicmodels')
+# install.packages('tidytext')
+library(topicmodels)
+library(tidytext)
+
+# Topic (number of topis k) modeling based on the original DFM
+myLda <- LDA(myDfm,k=2,control=list(seed=101))
+myLda
+
+# Term-topic probabilities
+myLda_td <- tidy(myLda)
+myLda_td
+
+# Visiualize most common terms in each topic
+library(ggplot2)
+library(dplyr)
+
+top_terms <- myLda_td %>%
+  group_by(topic) %>%
+  top_n(6, beta) %>% # choose the top 6 that has highest beta
+  ungroup() %>%
+  arrange(topic, -beta) # descending order of beta
+
+top_terms %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip()
+
+# log_ratio calculated differences between two topics
+library(tidyr)
+beta_spread <- myLda_td %>%
+  mutate(topic = paste0("topic", topic)) %>%
+  spread(topic, beta) %>%
+  filter(topic1 > .001 | topic2 > .001) %>%
+  mutate(log_ratio = log2(topic2 / topic1))
+
+head(beta_spread)
+
+# Visulize the greatest differences between the two topics
+beta_spread %>%
+  mutate(term = reorder(term, log_ratio)) %>%
+  ggplot(aes(term, log_ratio)) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  coord_flip()
+
+# Document-topic probabilities
+ap_documents <- tidy(myLda, matrix = "gamma")
+ap_documents
+
+# Document similarity for "text1"
+text_sim <- textstat_simil(myDfm, 
+                           selection="text1",
+                           margin="document",
+                           method="correlation")
+
+head(as.matrix(text_sim),6) # text 2 and 6 are more correlated text 1
+
+
+
+# Document similarity for "text1"using cosine
+text_sim <- textstat_simil(myDfm, 
+                           selection="text1",
+                           margin="document",
+                           method="cosine")
+
+head(as.matrix(text_sim),6) # text 2 and 6 are more correlated text 1
+
+
+# Perform hierarchical clustering for documents
+doc_dist <- textstat_dist(myDfm)
+clust <- hclust(as.dist(doc_dist)) # hierarchical cluster
+plot(clust,xlab="Distance",ylab=NULL) # text and 6 are very similar and they are similar to text 1. text 3 an 4 are together.
+
+
+# Term similarity
+term_sim <- textstat_simil(myDfm,
+                           selection="banana", # find similar terms to selection banana
+                           margin="feature", 
+                           method="correlation") # can be used alternative methods cosine, eucladian
+head(as.matrix(term_sim),5) # show top 5
+
