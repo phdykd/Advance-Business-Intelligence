@@ -1,0 +1,142 @@
+setwd("C:/Users/admin/Desktop/UNCC/Spring 2021/Assignments/6211/Assignment4_YKD_801210873")
+
+# Australian Wine Series Data
+
+# Exercise 1: Regression-based Model & Smoothing Methods
+
+# install.packages('forecast')
+# install.packages("zoo")
+
+library(forecast)
+library(zoo)
+
+# Read data
+
+dfYKD <- read.csv("AustralianWines.csv")
+dfYKD<-na.omit(dfYKD)
+str(dfYKD)
+head(dfYKD)
+table(dfYKD$Month)
+
+# Convert data into time series object in R
+library(forecast)
+
+# start: the time of the first observation
+# frequency: number of times per year
+# ts is time series function from package. 
+# there is monthly data and the frequency will be 12.
+# you need to specify when the time-series start and cycle (frequency)
+
+dfYKD <- ts(dfYKD$Red, start=c(1980,1),frequency = 12) 
+dfYKD
+plot(dfYKD)
+
+
+
+# Data partition for time series data
+# Use the last 24 months data as the validation dataset (hold-out sample).
+
+nValid<-24
+nTrain<-length(dfYKD)-nValid #length x calculates how many time series you have
+
+dfYKD.train<-window(dfYKD,start=c(1980,1),end=c(1980,nTrain))# window function is sub-setting
+dfYKD.valid<-window(dfYKD,start=c(1980,nTrain+1),end=c(1980,nTrain+nValid))
+
+## Forecasting Models
+## Model1-Regression Based:Trend & Seasonality
+
+########## Linear Trend Model, Linear trend ????t=????0+????1t +????t ########## 
+
+train.lmYKD<- tslm(dfYKD.train~trend) # simple linear model
+summary(train.lmYKD) # Yt=831.84+8.87t. p is less than 0.05, very significant. But r2=0.54 is not good.
+
+
+# create prediction using forecast, h is number of forecast for the future (24 in this case)
+
+train.lmYKD.pred<-forecast(train.lmYKD, h=nValid, level=0) # it is basically Y hat
+accuracy(train.lmYKD.pred,dfYKD.valid) # model performance MAPE was 25%
+
+
+
+# Visualize the linear trend model
+
+par(mfrow=c(1,1))
+plot(train.lmYKD.pred, ylim = c(500,3500), ylab="Australian Red Wine Sales", xlab="Time",
+     bty="l", xaxt="n", xlim=c(1980,1994), main= "",flty=2)
+axis(1, at=seq(1980,1994,1), labels=format(seq(1980,1994,1)))
+lines(train.lmYKD.pred$fitted,lwd=2,col="blue")
+lines(dfYKD.valid)
+
+# Evaluate model performance
+accuracy(train.lmYKD.pred, dfYKD.valid)
+
+
+########## Seasonality ########## 
+
+# A model with seasonality
+# In R, function tslm() uses ts() which automatically creates the categorical Season column (called season) and converts it into dummy variables.
+
+train.lmYKD.season <- tslm(dfYKD.train ~ season) # due to the 12 months, you ll have 11 dummy 
+summary(train.lmYKD.season) # 811.3-271.4Feb+ 460.2March+563.1April+...+930.5Dec. There is no significant difference between Jan and Feb, since the Feb has p more than 0.05 
+# August has the highest seasonal dummy coefficient, and August is expected to have the highest sales.
+
+train.lmYKD.season.pred <- forecast(train.lmYKD.season, h = nValid, level = 0)
+accuracy(train.lmYKD.season.pred,dfYKD.valid)  # MAPE is 31%. This is less accurate than trend model
+
+
+########## Linear Trend & Seasonality ########## 
+# A model with linear trend and seasonality. 
+train.lmYKD.trend.season <- tslm(dfYKD.train ~ trend + season)
+summary(train.lmYKD.trend.season) # Yt = 189.2 + 8.52t + 263Feb + 443March + ....+837Dec. Linear trend is still statistical significant. There is significant difference between Jan and Feb.
+# July has the highest seasonal dummy coefficient, and July is expected to have the highest sales.
+
+# create prediction using forecast, h is number of forecast for the future (24 in this case)
+train.lmYKD.trend.season.pred <- forecast(train.lmYKD.trend.season, h = nValid, level = 0)
+accuracy(train.lmYKD.trend.season.pred,dfYKD.valid) # MAPE is 14%. This is more accurate than Linear trend and seasonality alone model
+
+
+
+###########################################################################
+
+## Model2-Smoothing Methods:Simple Moving Average & Simple Exponential Smoothing
+
+########## Simple Moving Average ########## 
+
+# time horizon need to be defined
+
+maYKD <- rollmean(dfYKD,k=12,align="right") # dfYKD is the original time-series, k is 12 time period. mean of 11 will be considered for the 12th one). December will be the mean of previous 11 months.
+summary(maYKD)
+
+# Observe the difference between forecasted maYKD vs original data dfYKD
+maYKD # is forecasting data
+dfYKD # is observation data
+
+# Calculate MAPE
+MAPE = mean(abs((maYKD-dfYKD)/dfYKD),na.rm=T) # ignore NA values
+MAPE # 20.9% it is WORSE than linear trend seasonality model. 
+
+########## Simple Exponential Smoothing ########## 
+
+
+# run simple exponential smoothing
+# and alpha = 0.2 to fit simple exponential smoothing.
+ses <- ses(dfYKD.train, alpha = 0.2, h=24) # this is training time-series, horizon into 24 months. adjusting the smoothing function with alfa
+summary(ses)
+autoplot(ses)
+accuracy(ses,dfYKD.valid) # MAPE is 26%. It performs little bit worse than Moving Average and Linear Trend+Seasonality model. But performs little bit better than seasonality alone model.
+# why did we choose alfa 0.2. It can be chosen between 0 to 1.
+
+# Use ses function to estimate alpha
+# instead of calling alfa arbitrarily, let us see find out with data
+ses1 <- ses(dfYKD.train, alpha = NULL, h=24) # to be consistent with validation dataset h is selected 24.
+summary(ses1) # alfa is found 0.6492 
+accuracy(ses1,dfYKD.valid) # MAPE 31.78 % is worse than before (alfa 0.2) because of over-fitting issue.
+autoplot(ses1)
+
+
+
+
+
+
+
+
