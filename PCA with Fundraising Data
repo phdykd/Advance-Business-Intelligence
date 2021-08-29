@@ -1,0 +1,196 @@
+install.packages("caret")
+install.packages('pROC')
+install.packages("factoextra")
+install.packages("corrplot")
+library(caret)
+library(pROC)
+library(factoextra)
+library(corrplot)
+
+# Read data
+df5 <- read.csv('Fundraising.csv')
+
+# Initial exploration
+summary(df5)
+str(df5)
+
+# Change the data type from integer to category
+# Modify data type/measurement level
+df5$Donor <- factor(df5$Donor)
+df5$zipcode <- factor(df5$zipcode)
+df5$homeowner.dummy <- factor(df5$homeowner.dummy)
+df5$gender.dummy <- factor(df5$gender.dummy)
+
+# Multi-collinearity check
+# checking multi-collinearity with GVIF
+# install.packages("car")
+# library(car)
+# vif(glm(formula=Donor~.,family=binomial(link="logit"),data=df5))
+# Since, gvif is more than 10, there is multi-collinearity issue with Icmed, Icavg.
+
+
+# Data partition with the Caret package
+trainIndex <- createDataPartition(df5$Donor,
+                                  p=0.7,
+                                  list=FALSE,
+                                  times=1)
+
+df5.train <- df5[trainIndex,]
+df5.valid <-df5[-trainIndex,]
+
+# Model 5 without PCA (logistic regression without PCA)
+model5 <- train(Donor~.,
+                data=df5.train,
+                method="glm",
+                family="binomial")
+summary(model5)
+
+# Evaluate Model 5 performance
+m5.prediction <- predict(model5,df5.valid)
+confusionMatrix(m5.prediction,df5.valid$Donor)
+
+
+
+# Model 6: PCA with all numeric variables_WRONG WAY TO DO PCA
+# SELECT NUMCERICAL COLUMNS TO RUN THE PCA
+# PCA is unsupervised, when you run PCA DV should not be part of it.
+# PCA best runs with numerical variables. Therefore, you should reject the categoricals when you run PCA model.
+# Select the numerical variables only with df5_num
+
+df5_num <- df5[,c(3, 5:11)]
+# x number of numverical independent variables x number of PCA
+
+# Normalization = variable=-min/(max-min)
+
+# Z TRANSFORMATION = variable-mean/stdev
+
+# provide df5_num that has numerical variables
+
+pca <- prcomp(df5_num,center=TRUE,scale. = TRUE)
+
+
+# COEFFICIENTS=eigenvectors
+print(pca)
+# example PC1=coefficient*variable+....
+
+plot(pca,type='l')
+summary(pca)
+# here the standard dev is eigenvalue
+# the first PC captures 35 % of the variance that is less than 40% and not good.
+
+# Plot PCA
+library(factoextra)
+fviz_eig(pca)
+fviz_pca_var(pca,
+             col.var = "contrib", # Color by contributions to the PC
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE     # Avoid text overlapping
+)
+
+# bar shows the contribution of each of the independent variable. 3 variables have same direction, and the variables are all over the place.
+# The reason of them having different directions could be they do not capture similar features.
+# Variables that have same directions capture similar features.
+
+# check the eigenvalue>1 and the cumulative proportion they represent for reducing dimensionality
+
+
+# Predict PCA
+pred_pca <- predict(pca, newdata=df5_num)
+
+
+# Create dataset for PC values and categorical variables
+# combine categorical variables of original dataframe (df5) with the first 3 columns of pred_pca (since you wanted to keep PC's that have eigenvalue>1) 
+# this time you have DV, all categorical variables, and 3 PCs
+# The reason of having 3 PCs is already captured the other PCs with 3 PCs.
+df6 <- cbind.data.frame(df5[,c(1:2, 4, 12)],pred_pca[,c(1:3)])
+
+#Create second logistic regression for df6
+df6.train <- df6[trainIndex,]
+df6.valid <-df6[-trainIndex,]
+
+# Model 6 with PCA-all numbers
+model6 <- train(Donor~.,
+                data=df6.train,
+                method="glm",
+                family="binomial")
+summary(model6)
+
+# model 6 explains that we should not run PCA randomly. 
+# The reasons:
+# 1- PC1 captures less than 40% of the variance.
+# 2- If you throw all of the variables into PC, you will not know what these mean. It is very unclear and hard to explin the model performance. Like garbage in garbage out.
+
+
+# Evaluate Model 6 performance
+m6.prediction <- predict(model6,df6.valid)
+confusionMatrix(m6.prediction,df6.valid$Donor)
+
+# Accuracy is still mediocre
+
+
+# Run PCA with selective numerical variables that should be combined
+# The smart way of doing PCA is to put conceptually related variables together to create the PC.
+# It will be easy to put one or two together and represent the remaining with these.
+
+# show correlation matrix for numerical variables..
+
+M <- cor(df5_num)
+M
+# M shows the correlation between HV, Icmed, Icavg is high. It will be smart to put these conceptually related variables together,
+# which explains neighborhood socioeconomic status.
+
+corrplot(M,type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+
+# it would be ideal to create subset of numerical variables of original df, which are
+# highly correlated (HV, Icmed, Icavg) (column 6:8 is highly correlated numerical ones)
+
+df5_num2 <- df5[,c(6:8)]
+
+pca2 <- prcomp(df5_num2,center=TRUE,scale. = TRUE)
+
+print(pca2)
+# PC1= -0.54HV-0.59Icmed-0.60Icvag
+
+plot(pca2,type='l')
+summary(pca2)
+#PC1 has eigenvalue more than 1
+#PC1 captures the 88% of the variance
+# We can use PC1 to represent HV,Icmed,Icavg.
+
+# It seems better than model 6 of pca
+
+# Predict PCA-Selected columns
+pred_pca2 <- predict(pca2, newdata=df5_num2)
+
+# from original dataframe everything other than Icmed, Icavg, and HV. these are represented by PC1.
+# combine the eigenvalue>1 of pred_pca2 (PC1) with the remaining variables (including DV) of original df5 (except HV, ICmed, ICavg)
+# combine PC1 with everything else except HV, Icmed, Icavg that are represented by PC1
+
+df7 <- cbind.data.frame(df5[,c(1:5,9:12)],pred_pca2[,1])
+
+# change the name of col10 to PC1
+
+names(df7)[10]='PC1'
+
+df7.train <- df7[trainIndex,]
+df7.valid <-df7[-trainIndex,]
+
+# Model 7 with PCA-selected numbers
+model7 <- train(Donor~.,
+                data=df7.train,
+                method="glm",
+                family="binomial")
+summary(model7)
+
+
+# When you apply selective columns with PCA, you have several benefits
+# 1- First PC1 captures majority of proportion of variance 88%
+# 2-When you apply conceptually, it makes sense, you can turn the PC1 to financially distress of the neighborhood. PC1 tells how poor is the neighborhood.
+# 3- If the p of PC1 was<0.05  , you could have told that poor people are more likely to donate.
+# 4- We reduced dimensionality without loosing too much information
+
+# Evaluate Model 7 performance
+m7.prediction <- predict(model7,df7.valid)
+confusionMatrix(m7.prediction,df7.valid$Donor)
+
