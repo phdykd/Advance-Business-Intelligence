@@ -1,0 +1,806 @@
+# title: "DSBA ABI Academic Enrollment"
+# author: "Yusuf Kemal Demir; Ph.D."
+# date: "02/14/2021"
+
+### Scenario1 ###
+
+# Model1: "Logistic Regression"
+
+#1.	Set Working Directory, download and save the data file INQ2019 in R Studio Working Directory
+
+setwd("C:/Users/admin/Desktop/UNCC/Spring 2021/Assignments/6211/Assignment_1")
+
+#2.	Install packages
+
+# # creating predictive models
+# install.packages("caret")
+
+# # imputation
+# install.packages("e1071")
+# install.packages("Hmisc")
+
+# # checking multi-colinearity with GVIF
+# install.packages("car")
+
+# # evaluate model performance with ROC curve
+# install.packages("pROC")
+
+# # data manipulation for lift
+# install.packages("dplyr")
+
+# install.packages("tidyverse")
+
+
+#3. Load libraries
+
+library(caret)
+library(e1071)
+library(car)
+library(pROC)
+library(dplyr)
+library(tidyverse)
+library(Hmisc)
+
+#4.	Import inq2019.csv file and running multi-colinearity
+
+df1<-read.csv("inq2019.csv", na.strings = c("NA",""))
+colnames(df1)
+summary(df1)
+str(df1)
+
+
+# There were aliased coefficients in the mode, and Warning messages glm.fit: algorithm did not converge. 
+#Therefore, first missing values were dealt and then multi-colinearity examined.
+
+#5.	Variable Selection:Some variables will not enter the model
+# Legal consideration
+# Privacy/ethical issues
+# Significant quality issues
+# Constant
+# Conceptually non related
+# Redundant information
+
+#a. Rejected columns: ACADEMIC_INTEREST_1, ACADEMIC_INTEREST_2, and IRSCHOOL.They were replaced by the interval variables INT1RAT, INT2RAT, and HSCRAT, respectively
+#b. Irrelevant columns: CONTACT_CODE1 and CONTACT_DATE.They were rejected due to their irrelevance suggested by Enrollment Management. 
+#c. Privacy/ethical issues: ETHNICITY and sex should be removed. It may not be used in the model of Fall 2020 freshman class enrollment.
+#d. Constant: LEVEL_YEAR can be removed, since it is constant.
+#e. Significant quality issues: 77% of telecq data is missing, thus removed.
+#f. Redundant information: SELF_INIT_CNTCTS, TRAVEL_CNTCTS,SOLICITED_CNTCTS,REFERRAL_CNTCTS are removed; due to of having TOTAL_CNTCTS. Also, using contacts separately with total contacts may create a multi-colinearity issue.
+
+# Before Variable Selection
+# Presenting Missing Values
+
+missing.values <- df1 %>%
+  gather(key = "key", value = "val") %>%
+  mutate(is.missing = is.na(val)) %>%
+  group_by(key, is.missing) %>%
+  summarise(num.missing = n()) %>%
+  filter(is.missing==T) %>%
+  select(-is.missing) %>%
+  arrange(desc(num.missing))
+
+missing.values
+
+missing.percent<-missing.values$num.missing*100/91482
+missing.percent
+
+#Comparing percentage of present vs missing values
+missing.values <- df1 %>%
+  gather(key = "key", value = "val") %>%
+  mutate(isna = is.na(val)) %>%
+  group_by(key) %>%
+  mutate(total = n()) %>%
+  group_by(key, total, isna) %>%
+  summarise(num.isna = n()) %>%
+  mutate(pct = num.isna / total * 100)
+levels <- (missing.values  %>% filter(isna == T) %>%     
+             arrange(desc(pct)))$key
+percentage.plot <- missing.values %>%
+  ggplot() +
+  geom_bar(aes(x = reorder(key, desc(pct)), 
+               y = pct, fill=isna), 
+           stat = 'identity', alpha=0.8) +
+  scale_x_discrete(limits = levels) +
+  scale_fill_manual(name = "", 
+                    values = c('steelblue', 'tomato3'), 
+                    labels = c("Present", "Missing")) +
+  coord_flip() +
+  labs(title = "Percentage of missing values of raw data", 
+       x = 'Variable', y = "% of missing values")
+percentage.plot
+
+
+# Pro Variable Selection
+
+df2<-df1[,-c(1,3,4,6,8,9,10,11,13,14,15,17,19)]
+#Remove the negative value of init_span= -216 rowno:2044
+df2 <- subset(df2, init_span!= -216.00)
+colnames(df2)
+
+#Correcting data types and measurement level; 
+# factorize the variables
+df2$Enroll<-factor(df2$Enroll)
+df2$TERRITORY<-factor(df2$TERRITORY)
+df2$mailq<-factor(df2$mailq)
+df2$premiere<-factor(df2$premiere)
+df2$interest<-factor(df2$interest)
+df2$stucell<-factor(df2$stucell)
+
+
+# Presenting Missing Values Pro Variable Selection
+
+missing.values2 <- df2 %>%
+  gather(key = "key", value = "val") %>%
+  mutate(is.missing = is.na(val)) %>%
+  group_by(key, is.missing) %>%
+  summarise(num.missing = n()) %>%
+  filter(is.missing==T) %>%
+  select(-is.missing) %>%
+  arrange(desc(num.missing))
+
+missing.values2
+
+missing.percent2<-missing.values2$num.missing*100/91481
+missing.percent2
+
+
+
+#Comparing percentage of present vs missing values pro variable selection
+missing.values2<- df2 %>%
+  gather(key = "key", value = "val") %>%
+  mutate(isna = is.na(val)) %>%
+  group_by(key) %>%
+  mutate(total = n()) %>%
+  group_by(key, total, isna) %>%
+  summarise(num.isna = n()) %>%
+  mutate(pct = num.isna / total * 100)
+levels <- (missing.values2  %>% filter(isna == T) %>%     
+             arrange(desc(pct)))$key
+percentage.plot2 <- missing.values2 %>%
+  ggplot() +
+  geom_bar(aes(x = reorder(key, desc(pct)), 
+               y = pct, fill=isna), 
+           stat = 'identity', alpha=0.8) +
+  scale_x_discrete(limits = levels) +
+  scale_fill_manual(name = "", 
+                    values = c('steelblue', 'tomato3'), 
+                    labels = c("Present", "Missing")) +
+  coord_flip() +
+  labs(title = "Percentage of missing values pro variable selection", 
+       x = 'Variable', y = "% of missing values")
+percentage.plot2
+
+
+
+# Multi-collinearity check
+
+vif(glm(formula=Enroll~.,family=binomial(link="logit"),data=df2))
+# Since, gvif is less than 10, there is not multi-collinearity issue in df2.
+
+
+#6.	Target Variable Selection and Imputation: 
+# Dependent variable can be "Enroll" while doing logistic regression. 
+# Continuous variable imputation
+# "satscore" is very critical continuous variable for the model, however, the missing data % is 77, in this scenario, satscore will be rejected.
+# "distance" and "avg_income" as continuous variable have less than 25% missing data, mean values can be used for filling the missing values.
+# "TOTAL_CONTACTS" have skewness, regroup transformation is executed.
+# Log transformation for skewed variable hscrat is executed
+
+# Histogram matrix of df2 pre imputation
+colnames(df2)
+par(mar=c(1,1,1,1))
+hist.data.frame(df2)
+
+# Imputation
+
+df2<-df2[,-c(5)]
+df2$distance<-with(df2,impute(distance,mean))
+df2$avg_income<-with(df2,impute(avg_income,mean))
+
+
+#regroup TOTAL_CONTACTS
+hist_total_contacts <- ggplot(df2,aes(x=TOTAL_CONTACTS))+
+  geom_histogram(binwidth = 0.5)
+hist_total_contacts
+
+table(df2$TOTAL_CONTACTS)
+
+combine.TOTAL_CONTACTS<- function(x){
+  if (is.na(x)){
+    return(NA)
+  }else if(x<=1){
+    return("0")
+  }else{
+    return("1")
+  }
+}
+
+df2$TOTAL_CONTACTS<-sapply(df2$TOTAL_CONTACTS,combine.TOTAL_CONTACTS)
+
+
+hist_campus_visit<- ggplot(df2,aes(x=CAMPUS_VISIT))+
+  geom_histogram()
+hist_campus_visit
+
+hist_init_span <- ggplot(df2,aes(x=init_span))+
+  geom_histogram(binwidth = 0.5)
+hist_init_span
+
+hist_int1rat <- ggplot(df2,aes(x=int1rat))+
+  geom_histogram(binwidth = 0.01)
+hist_int1rat
+table(df2$int1rat)
+
+
+hist_int2rat <- ggplot(df2,aes(x=int2rat))+
+  geom_histogram(binwidth = 0.01)
+hist_int2rat
+
+# Log transformation for skewed variable hscrat
+
+df2$hscrat<-log10(df2$hscrat+1)
+
+hist_hscrat <- ggplot(df2,aes(x=hscrat))+
+  geom_histogram()
+hist_hscrat
+
+
+hist_avg_income <- ggplot(df2,aes(x=avg_income))+
+  geom_histogram()
+hist_avg_income
+
+hist_distance <- ggplot(df2,aes(x=distance))+
+  geom_histogram()
+hist_distance
+
+
+# Check skewness and Histogram matrix pro imputation
+colnames(df2)
+par(mar=c(1,1,1,1))
+hist.data.frame(df2)
+
+
+
+# 7 Model for Scenario1
+# Logistic Regression Model 
+
+# Data partition with the Caret package
+# Set a random see so your "random" results are the same as me (optional)
+
+set.seed(101)
+Index1<-createDataPartition(df2$Enroll,
+                                p=0.7,
+                                list = FALSE,
+                                times = 1)
+
+#Create Training Data
+df2.train<-df2[Index1,]
+
+#Create Validation Data
+df2.valid<-df2[-Index1,]
+
+# Run a very simple baseline model with the training dataset
+model1<-train(Enroll~.,
+                      data=df2.train,
+                      method="glm",
+                      family='binomial',
+                      na.action = na.pass)
+
+
+# View the model results
+summary(model1)
+
+
+#Evaluation model1 performance using the validation dataset
+
+#Criteria 1: the confusion matrix
+
+prediction1<-predict(model1,newdata=df2.valid)
+
+#Need to remove missing values from the validation dataset for evaluation
+df2.valid.nonmissing<-na.omit(df2.valid)
+
+confusionMatrix(prediction1,df2.valid.nonmissing$Enroll)
+
+
+#Criteria 2: the ROC curve and area under the curve
+pred.probabilities1<-predict(model1,newdata = df2.valid,type="prob")
+regression.ROC1<-roc(predictor=pred.probabilities1$"1",
+                    response=df2.valid.nonmissing$Enroll,
+                    levels=levels(df2.valid.nonmissing$Enroll))
+
+plot(regression.ROC1)
+regression.ROC1$auc
+
+
+
+##Criteria 3: User-defined functions to calculate cumulative lift & gains
+
+lift<-function(depvar,predcol,groups=10){
+  if(is.factor(depvar))depvar<-as.integer(as.character(depvar))
+  
+  helper<-data.frame(cbind(depvar,predcol))
+  helper<-helper[order(-helper$predcol),]
+  
+  helper[,"bucket"]=ntile(-helper[,"predcol"],groups)
+  gaintable=helper%>%group_by(bucket)%>%
+    summarise_at(vars(depvar),funs(total=n(),
+                                   totalresp=sum(.,na.rm=TRUE)))%>%
+    mutate(Cumresp=cumsum(totalresp),
+           Gain=Cumresp/sum(totalresp)*100,
+           Cumlift=Gain/(bucket*(100/groups)))
+  return(gaintable)
+}
+
+# Apply the user-defined lift function 
+dt1=lift(df2.valid.nonmissing$Enroll,pred.probabilities1$"1", groups = 10)
+print(dt1)
+
+# Plot the cumulative lift chart
+plot(dt1$bucket,dt1$Cumlift,type="l",ylab="Cumulative lift",xlab="Bucket")
+
+
+### Scenario2 ###
+
+# Model2: "Decision Tree"
+
+
+#1.	Install packages
+
+# install.packages("rpart")
+# install.packages("rpart.plot")
+
+## creating predictive models
+# install.packages("caret")
+
+## evaluate model performance with ROC curve
+# install.packages("pROC")
+
+#2. Load libraries
+
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(pROC)
+
+
+#3.	Similar to scenario1 (but not same) some variables will not enter the model
+df3<-df1[,-c(1,3,4,6,8,9,10,11,13,14,15,17)]
+df3$Enroll<-factor(df3$Enroll)
+colnames(df3)
+
+
+#4. Model for Scenario2
+# Decision Tree Model 
+
+# Set a random see so your "random" results are the same as me (optional)
+set.seed(101)
+Index2<-createDataPartition(df3$Enroll,
+                                     p=0.7,
+                                     list=FALSE,
+                                     times=1)
+
+
+# Create Training Data
+df3.train<-df3[Index2,]
+
+# Create Validation Data
+df3.valid<-df3[-Index2,]
+
+# Build a decision tree model
+model2<-train(Enroll~.,
+                  data=df3.train,
+                  method="rpart",
+                  na.action = na.pass)
+
+# Display decision tree results
+model2
+
+
+# Display decision tree plot
+prp(model2$finalModel,type=2,extra=106)
+
+# Evaluation model performance using the validation dataset
+
+# Criteria 1: the confusion matrix
+prediction2<-predict(model2,newdata=df3.valid,na.action=na.pass)
+confusionMatrix(prediction2,df3.valid$Enroll)
+
+# Criteria 2: the ROC curve and area under the curve
+
+probabilities2<-
+  predict(model2,newdata=df3.valid,type="prob",na.action=na.pass)
+
+tree.ROC1 <- roc(predictor=probabilities2$`1`,
+                response=df3.valid$Enroll,
+                levels=levels(df3.valid$Enroll))
+par(mar=c(1,1,1,1))
+
+plot(tree.ROC1)
+
+tree.ROC1$auc
+
+
+### Scenario3 ###
+
+# Model 3 and Model 4  will be used in scenario3.
+
+# Model3: "Regression Tree for scoring missing satscore"
+
+
+
+# Pro Variable Selection
+df4<-df1[,-c(1,3,4,6,8,9,10,11,13,14,15,17)]
+
+
+#Remove the negative value of init_span= -216 rowno:2044
+par(mar=c(1,1,1,1))
+
+df4<- subset(df4, init_span!= -216.00)
+
+df5<-subset(df4,satscore!="NA")
+
+df6<-subset(df4,is.na(df4$satscore))
+
+summary(df6$satscore)
+summary(df1$satscore)
+summary(df5$satscore)
+
+
+colnames(df5)
+
+# Predicting missing satscore using Regression Tree
+
+# Set a random seed so your "random" results are the same as me (optional)
+set.seed(101)
+Index3 <- createDataPartition(df5$satscore,
+                              p=0.7,
+                              list=FALSE,
+                              times=1)
+
+
+
+
+
+# Create Training Data
+df5.train <- df5[Index3,]
+
+# Create Validation Data
+df5.valid <-df5[-Index3,]
+
+#Grow a tree
+rtree.fit<-rpart(satscore~.,
+                 data=df5.train,
+                 method="anova",
+                 control=rpart.control(minsplit=30,cp=0.001))
+
+# Examine the tree
+
+printcp(rtree.fit) 
+par(mar=c(1,1,1,1))
+rsq.rpart(rtree.fit)
+plotcp(rtree.fit)
+summary(rtree.fit)
+
+# plot tree 
+plot(rtree.fit, uniform=TRUE, 
+     main="Regression Tree for satscore")
+text(rtree.fit, use.n=TRUE, all=TRUE, cex=.3)
+
+# create more attractive plot of tree 
+#using prp() in the rpart.plot package
+prp(rtree.fit)
+
+# prune the tree based on minimum xerror
+pruned.rtree.fit<- prune(rtree.fit, cp= rtree.fit$cptable[which.min(rtree.fit$cptable[,"xerror"]),"CP"])
+
+# plot the pruned tree using prp() in the rpart.plot package 
+prp(pruned.rtree.fit, main="Pruned Regression Tree for satscore")
+
+# prune the tree based on 1 SE error 
+pruned2.rtree.fit<- prune(rtree.fit, cp=.00186)
+
+# plot the pruned tree using prp() in the rpart.plot package
+prp(pruned2.rtree.fit, main="Pruned2 Regression Tree for satscore")
+
+#original tree
+cor(predict(rtree.fit, newdata=df5.valid),df5.valid$satscore)^2
+
+#pruned tree#1
+cor(predict(pruned.rtree.fit, newdata=df5.valid),df5.valid$satscore)^2
+
+
+#pruned tree#2
+cor(predict(pruned2.rtree.fit, newdata=df5.valid),df5.valid$satscore)^2
+
+
+#score unseen satscore with pruned tree#2
+df6$satscore<-predict(pruned2.rtree.fit, df6)
+
+
+str(df6)
+summary (df6)
+
+#combine predicted satscore with nonmissing ones
+df7<-rbind(df5,df6)
+
+summary(df7)
+
+
+# Model4: "Decision Tree for Enroll"
+
+# Predicting enroll using Decision Tree
+
+df7$Enroll<-factor(df7$Enroll)
+
+
+# Set a random see so your "random" results are the same as me (optional)
+set.seed(101)
+Index4<-createDataPartition(df7$Enroll,
+                                          p=0.7,
+                                          list=FALSE,
+                                          times=1)
+
+
+# Create Training Data
+df7.train<-df7[Index4,]
+
+# Create Validation Data
+df7.valid<-df7[-Index4,]
+
+# Build a decision tree model
+model3<-train(Enroll~.,
+                             data=df7.train,
+                             method="rpart",
+                             na.action = na.pass)
+
+# Display decision tree results
+model3
+
+
+# Display decision tree plot
+prp(model3$finalModel,type=2,extra=106)
+
+# Evaluation model performance using the validation dataset
+
+# Criteria 1: the confusion matrix
+prediction3<-predict(model3,newdata=df7.valid,na.action=na.pass)
+confusionMatrix(prediction3,df7.valid$Enroll)
+
+# Criteria 2: the ROC curve and area under the curve
+
+probabilities3<-
+  predict(model3,newdata=df7.valid,type="prob",na.action=na.pass)
+
+tree.ROC2 <- roc(predictor=probabilities3$`1`,
+                           response=df7.valid$Enroll,
+                           levels=levels(df7.valid$Enroll))
+par(mar=c(1,1,1,1))
+
+plot(tree.ROC2)
+
+tree.ROC2$auc
+
+
+
+
+### Scenario4 ###
+
+# Model 5 and Model 6  will be used in scenario3.
+
+# Model5: "Regression Tree for scoring missing satscore"
+# Regression tree part is same as  scenario3 
+
+
+# Model6: "Logistic Regression  for scoring enroll"
+
+colnames(df7)
+
+
+#1. Correcting data types and measurement level; 
+# factorize the variables
+df7$Enroll<-factor(df7$Enroll)
+df7$TERRITORY<-factor(df7$TERRITORY)
+df7$mailq<-factor(df7$mailq)
+df7$premiere<-factor(df7$premiere)
+df7$interest<-factor(df7$interest)
+df7$stucell<-factor(df7$stucell)
+
+
+
+#Comparing percentage of present vs missing values pro variable selection
+missing.values3<- df7 %>%
+  gather(key = "key", value = "val") %>%
+  mutate(isna = is.na(val)) %>%
+  group_by(key) %>%
+  mutate(total = n()) %>%
+  group_by(key, total, isna) %>%
+  summarise(num.isna = n()) %>%
+  mutate(pct = num.isna / total * 100)
+levels <- (missing.values3  %>% filter(isna == T) %>%     
+             arrange(desc(pct)))$key
+percentage.plot3 <- missing.values3 %>%
+  ggplot() +
+  geom_bar(aes(x = reorder(key, desc(pct)), 
+               y = pct, fill=isna), 
+           stat = 'identity', alpha=0.8) +
+  scale_x_discrete(limits = levels) +
+  scale_fill_manual(name = "", 
+                    values = c('steelblue', 'tomato3'), 
+                    labels = c("Present", "Missing")) +
+  coord_flip() +
+  labs(title = "Percentage of missing values of df7", 
+       x = 'Variable', y = "% of missing values")
+percentage.plot3
+
+
+
+#2. Multi-collinearity check
+
+vif(glm(formula=Enroll~.,family=binomial(link="logit"),data=df7))
+# Since, gvif is less than 10, there is not multi-collinearity issue in df7.
+
+
+#3. Target Variable Selection and Imputation: 
+# Dependent variable can be "Enroll" while doing logistic regression. 
+# Continuous variable imputation
+# "satscore" might be critical continuous variable for the model, therefore missing values were scored via regression tree of sceanrio3.
+# "distance" and "avg_income" as continuous variable have less than 25% missing data, mean values can be used for filling the missing values.
+# "TOTAL_CONTACTS" have skewness, regroup transformation is executed.
+# Log transformation for skewed variable hscrat is executed
+
+# Histogram matrix of df7 pre imputation
+colnames(df7)
+par(mar=c(1,1,1,1))
+hist.data.frame(df7)
+
+#4. Imputation
+
+df7<-df7[,-c(7)]
+df7$distance<-with(df7,impute(distance,mean))
+df7$avg_income<-with(df7,impute(avg_income,mean))
+
+
+#regroup TOTAL_CONTACTS
+hist_total_contacts1 <- ggplot(df7,aes(x=TOTAL_CONTACTS))+
+  geom_histogram(binwidth = 0.5)
+hist_total_contacts1
+
+table(df7$TOTAL_CONTACTS)
+
+combine.TOTAL_CONTACTS1<- function(x){
+  if (is.na(x)){
+    return(NA)
+  }else if(x<=1){
+    return("0")
+  }else{
+    return("1")
+  }
+}
+
+df7$TOTAL_CONTACTS<-sapply(df7$TOTAL_CONTACTS,combine.TOTAL_CONTACTS1)
+
+
+hist_campus_visit1<- ggplot(df7,aes(x=CAMPUS_VISIT))+
+  geom_histogram()
+hist_campus_visit1
+
+hist_init_span1 <- ggplot(df7,aes(x=init_span))+
+  geom_histogram(binwidth = 0.5)
+hist_init_span1
+
+hist_int1rat1 <- ggplot(df7,aes(x=int1rat))+
+  geom_histogram(binwidth = 0.01)
+hist_int1rat1
+table(df7$int1rat)
+
+
+hist_int2rat <- ggplot(df7,aes(x=int2rat))+
+  geom_histogram(binwidth = 0.01)
+hist_int2rat
+
+# Log transformation for skewed variable hscrat
+
+df7$hscrat<-log10(df7$hscrat+1)
+
+hist_hscrat1 <- ggplot(df7,aes(x=hscrat))+
+  geom_histogram()
+hist_hscrat1
+
+
+hist_avg_income1 <- ggplot(df7,aes(x=avg_income))+
+  geom_histogram()
+hist_avg_income1
+
+hist_distance1 <- ggplot(df7,aes(x=distance))+
+  geom_histogram()
+hist_distance1
+
+
+# Check skewness and Histogram matrix pro imputation
+colnames(df7)
+par(mar=c(1,1,1,1))
+hist.data.frame(df7)
+
+
+
+#5.  Model for Scenario4
+# Logistic Regression Model 
+
+# Data partition with the Caret package
+# Set a random see so your "random" results are the same as me (optional)
+
+set.seed(101)
+Index5<-createDataPartition(df7$Enroll,
+                            p=0.7,
+                            list = FALSE,
+                            times = 1)
+
+#Create Training Data
+df7.train<-df7[Index5,]
+
+#Create Validation Data
+df7.valid<-df7[-Index5,]
+
+# Run a very simple baseline model with the training dataset
+model4<-train(Enroll~.,
+              data=df7.train,
+              method="glm",
+              family='binomial',
+              na.action = na.pass)
+
+
+# View the model results
+summary(model4)
+
+
+#Evaluation model1 performance using the validation dataset
+
+#Criteria 1: the confusion matrix
+
+prediction4<-predict(model4,newdata=df7.valid)
+
+#Need to remove missing values from the validation dataset for evaluation
+df7.valid.nonmissing<-na.omit(df7.valid)
+
+confusionMatrix(prediction4,df7.valid.nonmissing$Enroll)
+
+
+#Criteria 2: the ROC curve and area under the curve
+pred.probabilities2<-predict(model4,newdata = df7.valid,type="prob")
+regression.ROC2<-roc(predictor=pred.probabilities2$"1",
+                     response=df7.valid.nonmissing$Enroll,
+                     levels=levels(df7.valid.nonmissing$Enroll))
+
+plot(regression.ROC2)
+regression.ROC2$auc
+
+
+
+##Criteria 3: User-defined functions to calculate cumulative lift & gains
+
+lift<-function(depvar,predcol,groups=10){
+  if(is.factor(depvar))depvar<-as.integer(as.character(depvar))
+  
+  helper<-data.frame(cbind(depvar,predcol))
+  helper<-helper[order(-helper$predcol),]
+  
+  helper[,"bucket"]=ntile(-helper[,"predcol"],groups)
+  gaintable=helper%>%group_by(bucket)%>%
+    summarise_at(vars(depvar),funs(total=n(),
+                                   totalresp=sum(.,na.rm=TRUE)))%>%
+    mutate(Cumresp=cumsum(totalresp),
+           Gain=Cumresp/sum(totalresp)*100,
+           Cumlift=Gain/(bucket*(100/groups)))
+  return(gaintable)
+}
+
+# Apply the user-defined lift function 
+dt2=lift(df7.valid.nonmissing$Enroll,pred.probabilities2$"1", groups = 10)
+print(dt2)
+par(mar=c(1,1,1,1))
+# Plot the cumulative lift chart
+plot(dt2$bucket,dt2$Cumlift,type="l",ylab="Cumulative lift",xlab="Bucket")
+
+
+
