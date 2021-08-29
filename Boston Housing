@@ -1,0 +1,191 @@
+# title: "DSBA ABI Boston Housing"
+# author: "Yusuf Kemal Demir; Ph.D."
+# date: "02/27/2021"
+
+
+
+
+# Q1: Random Forest
+
+# Set Working Directory, download and save the data file INQ2019 in R Studio Working Directory
+
+setwd("C:/Users/admin/Desktop/UNCC/Spring 2021/Assignments/6211/Assignment2_YKD_801210873")
+
+# install.packages
+
+# creating predictive models
+# install.packages("caret")
+# install.packages("randomForest")
+# install.packages("tidyverse")
+
+
+# install.packages("Hmisc")
+
+#load library
+
+library(caret)
+library(randomForest)
+# library(Hmisc)
+library(tidyverse)
+
+# Using Boston housing dataset 
+dfYKD<-read.csv("BostonHousing.csv",na.strings = c("","NA","?"))
+summary(dfYKD)
+str(dfYKD)
+
+
+
+# Histogram matrix of dfYKD
+# par(mar=c(1,1,1,1))
+# hist(dfYKD)
+
+
+
+# Identify abnormal data 
+# The mean of CHAS seems 0.06917 and its type as integer. It's range is 0 and 1. It's decided to be factorized.
+# The observation of RAD can be converted to character.It has 9 different observation, and its type as integer. It's decided to be factorized.
+# The CHAT..MED is Dependent Variable, It's mean seems 0.166 and its type as integer. It's range is 0 and 1. It's decided to be factorized.
+# The MEDV is continuous variable of CAT..MED. Since we have it's categorical type that is aimed to be as DV, MEDV will be rejected.
+
+# Fix the data issue
+
+dfYKD$CHAS<-factor(dfYKD$CHAS)
+dfYKD$RAD<-factor(dfYKD$RAD)
+dfYKD$CAT..MEDV<-factor(dfYKD$CAT..MEDV)
+dfYKD<-dfYKD[,c(-13)]
+
+summary(dfYKD)
+str(dfYKD)
+colnames(dfYKD)
+dim(dfYKD)
+table(dfYKD$RAD)
+
+
+# Data partition with the Caret package
+
+set.seed(101)
+trainIndex<-createDataPartition(dfYKD$CAT..MEDV, 
+                                p=0.7,
+                                list=FALSE,
+                                times=1)
+
+dfYKD.train<-dfYKD[trainIndex,]
+dfYKD.valid<-dfYKD[-trainIndex,]
+
+# Create a default random forest model
+
+RFYKD_default<-train(CAT..MEDV~.,
+                     data=dfYKD.train,
+                     method="rf",
+                     metric="Accuracy",
+                     ntree=100)
+print(RFYKD_default)
+
+ncol(dfYKD)
+
+
+# More detailed model tuning to search the best mtry
+tuneGrid<-expand.grid(.mtry=c(1:12))
+
+RFYKD_mtry<-train(CAT..MEDV~., 
+                  data= dfYKD.train, 
+                  method="rf", 
+                  metric="Accuracy", 
+                  tuneGrid=tuneGrid, 
+                  importance=TRUE, 
+                  ntree=100)
+
+print(RFYKD_mtry)  
+
+# Variable importance
+varImp(RFYKD_mtry)
+  
+
+# Evaluate model performance
+prediction<-predict(RFYKD_mtry,dfYKD.valid)
+confusionMatrix(prediction,dfYKD.valid$CAT..MEDV)
+
+
+
+# Q2: Support Vector Machine
+
+# install.packages("kernlab")
+library(kernlab)
+
+# Initial visual exploration
+YKDPL<-ggplot(dfYKD,aes(x=RM, y=LSTAT))+
+  geom_point(aes(color=CAT..MEDV))
+YKDPL
+
+# Same wrangled data is used.
+# Data partition with the caret package
+# It was already partitioned in line 64-73.
+
+# Create 10-fold cross validataion with trainControl() function
+trControl<-trainControl(method="cv",
+                        number = 10,
+                        search="grid")
+
+
+# SVM Model with the linear Kernel function
+# Pre-processing data with centering and scaling
+
+SVMdfYKD_linear<-train(CAT..MEDV~.,
+                       data=dfYKD.train,
+                       method="svmLinear",
+                       trControl=trControl,
+                       preProcess= c("center","scale"))
+
+print(SVMdfYKD_linear)
+
+# Evaluate the linear SVM model performance
+
+linear_pred<-predict(SVMdfYKD_linear,dfYKD.valid)
+confusionMatrix(linear_pred,dfYKD.valid$CAT..MEDV)
+
+
+
+# SVM Model with the Radial Kernel function
+
+
+SVMdfYKD_radial<-train(CAT..MEDV~.,
+                       data=dfYKD.train,
+                       method="svmRadial",
+                       trControl=trControl,
+                       preProcess=c("center","scale"))
+
+
+print(SVMdfYKD_radial)
+
+# Evaluate the radial SVM model performance
+
+radial_pred<-predict(SVMdfYKD_radial, dfYKD.valid)
+confusionMatrix(radial_pred,dfYKD.valid$CAT..MEDV)
+
+
+
+# Q3: Support Vector Machine with selected kernel function
+
+# Additional model tuning for the radial SVM model
+
+
+grid_radial<-expand.grid(sigma=c(0.0, 0.5, 0.75, 1.0, 1.3, 1.5),
+                         C=c(0, 0.05, 0.25, 0.5, 0.75, 1))
+
+
+SVMdfYKD_radial_tune<-train(CAT..MEDV~.,
+                            data=dfYKD.train,
+                            method="svmRadial",
+                            trControl=trControl,
+                            preProcess=c("center","scale"),
+                            tuneGrid=grid_radial)
+print(SVMdfYKD_radial_tune)
+
+# Evaluate the radial SVM radial_model_tuend performance
+
+radial_tune_pred<-predict(SVMdfYKD_radial_tune, dfYKD.valid)
+confusionMatrix(radial_tune_pred, dfYKD.valid$CAT..MEDV)
+
+  
+  
+
