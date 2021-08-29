@@ -1,0 +1,255 @@
+setwd("C:/Users/admin/Desktop/UNCC/Spring 2021/6211/Class R Excercise")
+
+# Objective: to predict authorship for 12 federalist papers
+
+# Quanteda tutorial: https://tutorials.quanteda.io
+
+# Read data
+papers <- read.csv('federalist.csv',stringsAsFactors = F) # do not consider strings as factor
+
+###############################################################
+# Part I: Initial exploration
+
+dim(papers) # 85 observations and 3 columns (features)
+
+table(papers$Author) #to figure our the authorship, should we filter out some papers? why?
+# written by Jay, hamilton and madison (coauthored) needs to be filtered out. hamilton, madison will be training
+# we want to keep unknown to make prediction. 
+
+# Narrow down to papers written by Hamilton/Madison/Unknown
+papers <- papers[which(papers$Author=="HAMILTON"|
+                         papers$Author=="MADISON"|
+                         papers$Author=="UNKNOWN"),]
+table(papers$Author)
+
+# Order records based on author
+papers <- papers[order(papers$Author),] #rearrange 
+
+# Remove "To the People of the State of New York: " This sentence was repeating that has 39 characters.
+papers$Text <- substring(papers$Text,40) # keep the characters that start from position 40.
+
+# Establish the corpus and initial DFM matrix
+library(quanteda)
+# corpus, matrix, and modeling are 3 necessary steps for text mining.
+# corpus will be based on Text column of papers
+myCorpus <- corpus(papers$Text) # tokes is number of words as well as punctuations. # types is unique number of tokens.
+
+summary(myCorpus)
+myDfm <- dfm(myCorpus) # document feature matrix
+dim(myDfm) # 77 rows, every single unique column turns to be tokens that is 8416
+
+# Simple frequency analyses
+tstat_freq <- textstat_frequency(myDfm)
+head(tstat_freq, 20) # top 20 frequent words
+
+# Visulize the most frequent terms
+library(ggplot2)
+myDfm %>% 
+  textstat_frequency(n = 20) %>% # use top 20 terms
+  ggplot(aes(x = reorder(feature, frequency), y = frequency)) +
+  geom_point() +
+  labs(x = NULL, y = "Frequency") +
+  theme_minimal()
+
+# Wordcloud
+textplot_wordcloud(myDfm,max_words=200) # most of them were stop words and would be better to remove them
+
+###############################################################
+#Part II: Exploratory analyses with similarity and clustering
+
+# Remove stop words and perform stemming
+library(stopwords)
+myDfm <- dfm(myCorpus,
+             remove_punc = T, # all punctuation will be removed
+             remove = c(stopwords("english")),# remove stopwords
+             stem = T) # and stemming
+dim(myDfm) # dimension is reduced from 8416 to 4795
+topfeatures(myDfm,30) # top 30 most frequent terms
+
+# Add more user-defined stop words
+# It is a bit subjective, and exercise your judgment with caution
+stopwords1 <-c('may','one','two','can','must',
+               'upon','might','shall')
+
+# refine the myDfm with custom made stopwords1
+myDfm <- dfm(myCorpus,
+             remove_punc = T,
+             remove=c(stopwords('english'),stopwords1),
+             stem = T) # chops off es, ing...
+
+dim(myDfm)# dimension is reduced from 4795 to 4788
+topfeatures(myDfm,30)
+textplot_wordcloud(myDfm,max_words=200)
+
+# choose very frequent words for stopwords2
+
+# Further remove some very frequency words # choose very frequents 
+stopwords2 <- c('state','govern','power',
+                'constitut','nation','peopl')
+myDfm <- dfm_remove(myDfm,stopwords2) # another way of removing stopwords
+dim(myDfm) # 4782 terms, and 77 sizable observations, which has very infrequency words as well
+topfeatures(myDfm,30)
+
+# Control sparse terms: to further remove some very infrequency words
+myDfm<- dfm_trim(myDfm,min_termfreq=4, min_docfreq=2) # terms appear less than 4 times throw them. you may have words that appears 4 times, but they only appear in 1 document. if word appears only in 1 document, get rid off them.
+dim(myDfm) # by removing infrequent words, we have 77 observations, 2345 terms is remaining.
+
+
+#hierarchical cluster
+# Perform document clustering
+# Explore results from clustering analyses
+doc_dist <- textstat_dist(myDfm) # distance measure
+clust <- hclust(as.dist(doc_dist)) # hierarchical cluster, distance measure will be recognized as distance object
+plot(clust,xlab="Distance",ylab=NULL) # visualize hierarchical cluster. text 1-51 was written by hamilton 52-65 was written by madison, 
+
+# clustering result of text 71 could be written by hamilton
+# clustering result of text 77 could be written by madison, since text 65 is the closest one to 77
+
+# Explore document similarity for text77
+# Based on the result, do you think who wrote text77?
+# You can also explore other similarity measures, such as cosine, 
+text_sim <- textstat_simil(myDfm, 
+                           selection="text77",
+                           margin="document", # similarity across document
+                           method="correlation") # what are the most similar document to text77 using the correlation
+as.list(text_sim,n=10) # 76, 75, 32, 69, 28 texts....
+
+# Explore terms most similar to "commerc"
+# You can also explore other terms, such as "court" and "war"
+term_sim <- textstat_simil(myDfm,
+                           selection="commerc", # word commerce was the point of interest
+                           margin="feature",# each term is column vector, thus the margin is feature
+                           method="correlation")
+as.list(term_sim,n=8) # see top 8 words that are similar to commerc
+# traffic, trafe, intercourse, commercial, european.... are highly correlated to word commerc
+
+###############################################################
+
+#Part III: Topic Modeling
+library(topicmodels) 
+library(tidytext) #in order to see results
+
+# LDA is  one of the  topic modeling you need to specify k (topic number)
+
+# Explore the option with 10 topics
+
+# You can explore with varying k numbers
+
+myLda <- LDA(myDfm,k=8,control=list(seed=101))
+myLda
+
+# Term-topic probabilities
+myLda_td <- tidy(myLda)
+myLda_td # for each term how it is related to 8 different topics. beta is term-topic probability
+
+# Visualize most common terms in each topic
+library(ggplot2)
+library(dplyr) # for data manipulation
+
+top_terms <- myLda_td %>%
+  group_by(topic) %>% # group by topic
+  top_n(8, beta) %>% # look most top relevant ones
+  ungroup() %>% # ungroup them
+  arrange(topic, -beta) # based on the descending order of beta
+
+top_terms %>%
+  mutate(term = reorder(term, beta)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_bar(stat = "identity", show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip()
+
+# number 2 term is about law
+# number 1 term is about trade
+# number 5 term is about military
+# number 7 term is about legislation branch
+
+
+# View topic 8 terms in each topic
+Lda_term<-as.matrix(terms(myLda,8))
+View(Lda_term)
+
+# Document-topic probabilities
+ap_documents <- tidy(myLda, matrix = "gamma") # gamma tells us document topic probability
+ap_documents # the probability of documents to be relebant to the topic
+
+
+# View document-topic probabilities in a table
+Lda_document<-as.data.frame(myLda@gamma)
+View(Lda_document) # probability covers the topic 1 is the highest at document 2
+
+###############################################################
+#Part IV: To predict authorship
+
+# Prepare the corpus by adding the ID and author columns
+# There is high dimensionality and sparcity with myDfm. To deal with high dimensionality, we apply SVD.
+# once you do SVD, you shrink number of columns. SVD gives you matrix representation of text
+
+docvars(myCorpus,"ID") <- papers$ID
+docvars(myCorpus, "Author") <- papers$Author
+summary(myCorpus)
+
+# We will first generate SVD columns based on the entire corpus
+# we will keep stopwords2, thus use stopwords1
+
+# Pre-process the training corpus
+modelDfm <- dfm(myCorpus,
+                remove_punc = T,
+                remove=c(stopwords('english'),stopwords1),
+                stem = T) 
+
+dim(modelDfm)
+
+# Further remove very infrequent words 
+modelDfm <- dfm_trim(modelDfm,min_termfreq=4, min_docfreq = 2)
+
+dim(modelDfm)# instead of 4788 dimensionality, now we have 2351 with 77 
+
+# Weight the predictive DFM by tf-idf
+
+modelDfm_tfidf <- dfm_tfidf(modelDfm) # penalize the weights, to adjust the weights in the matrix. tfidf does not change the dimensionality
+dim(modelDfm_tfidf)
+
+# Perform SVD for dimension reduction
+# Choose the number of reduced dimensions as 10
+library(quanteda.textmodels)
+modelSvd <- textmodel_lsa(modelDfm_tfidf, nd=10) # latent semantic..., nd tp specify is the column no to keep. Systematic way to remove . This is (nd) based on the sample size (77). Originally you have 2351, after running SVD, I will keep 10 most important attributes embedded.
+head(modelSvd$docs)# for each text theu only keep top 10 columns. Each assay (Text column in df) becomes vector with 10 elements. The unstrcutred "Text" column turns to be a matrix
+
+# Add the author information as the first column
+modelData <-cbind(papers$Author,as.data.frame(modelSvd$docs))
+
+# modelData <-cbind(docvars(myCorpus,"Author"),as.data.frame(modelSvd$docs))
+colnames(modelData)[1] <- "Author"
+head(modelData)
+
+# Split the data into training & test
+# Typically we use random data partition
+# However, given our specific dataset, we manually split the dataset
+# Training dataset contains papers with known author information
+# Test dataset contains papers with unknown author information
+trainData <- subset(modelData,Author=="HAMILTON"|Author=="MADISON") # specific data partitioning using Hamilton and Madison as tranining dataset
+testData <- subset(modelData,Author=="UNKNOWN") # if you do not know the author, it will be used in training dataset.
+
+# Need to drop the unused unknown level in the training dataset
+str(trainData)
+trainData$Author <- factor(trainData$Author)
+# trainData$Author <- droplevels(trainData$Author)
+str(trainData)
+
+# Build a logistic model based on the training dataset
+regModel <- glm(formula=Author~.,
+                family=binomial(link=logit),
+                data=trainData)
+
+# Compare model prediction with known authorships
+pred <- predict(regModel, newdata=trainData, type='response')
+pred.result <- ifelse(pred > 0.5,1,0)
+print(table(pred.result, trainData$Author))# out of 65 papers 61 was correctly predicted, it is a decent model
+
+# Predict authorship for the test dataset,there was not authors here
+unknownPred <- predict(regModel, newdata=testData, type='response')
+# View results
+unknownPred <- cbind(testData$Author,as.data.frame(unknownPred)) # change the predicition reaults to dataframe
+# 0 is hamilton, 1 is madison text 71 seems to be hamilton since it (0.0083622307) is very close to 0 
+
